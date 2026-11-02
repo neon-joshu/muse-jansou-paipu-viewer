@@ -34,6 +34,7 @@
 <div class="hud score" id="s2"></div><div class="hud score" id="s3"></div>
 <div id="fallback"><div>
   <p>このブラウザでは WebGPU が使えませんでした。</p>
+  <p id="fallback-detail" style="color:#94a3b8;font-size:12px"></p>
   <p><a href="../">通常版（DOM）ビューア</a>はそのまま使えます。</p>
 </div></div>
 
@@ -426,6 +427,9 @@ async function main() {
 
 main().catch(e => {
   console.error(e);
+  const d = document.getElementById("fallback-detail");
+  if (d) d.textContent = "詳細: " + (e && e.message ? e.message : String(e)) +
+    " / navigator.gpu: " + (navigator.gpu ? "あり" : "なし");
   document.getElementById("fallback").style.display = "grid";
 });
 </script>
