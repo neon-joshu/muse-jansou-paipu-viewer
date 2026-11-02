@@ -121,7 +121,7 @@ fn tiles_of(state: &serde_json::Value, key: &str, seat: usize) -> Vec<i32> {
 
 /// 牌譜 state（JSON文字列）からインスタンス列を作る
 #[wasm_bindgen]
-pub fn build_scene(state_json: &str) -> Vec<f32> {
+pub fn build_scene(state_json: &str, viewpoint: i32) -> Vec<f32> {
     let state: serde_json::Value = match serde_json::from_str(state_json) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
@@ -184,15 +184,17 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     for seat in 0..4 {
         let rot = seat_rot(seat);
         let wind = (seat + 4 - dealer) % 4;
-        // 風バッジ（雀魂準拠でパネルの角の外側。親は赤地、番の家は橙枠）
+        // 風バッジ（雀魂準拠でパネルの角の外側。親は赤地、番の家は橙枠。
+        // 左右の席はグリフの向きが牌と逆になるため 180° 返す）
         let (bx, by) = seat_xy(seat, -167.0, 167.0);
+        let brot = if seat % 2 == 1 { rot + std::f32::consts::PI } else { rot };
         let hot = match (seat == dealer, seat == turn) {
             (true, true) => 3.0,
             (true, false) => 1.0,
             (false, true) => 2.0,
             (false, false) => 0.0,
         };
-        e.badge(bx, by, rot, wind as i32, hot);
+        e.badge(bx, by, brot, wind as i32, hot);
         // 点数（辺の中央にセンタリング。ツモ番は淡黄）
         if let Some(score) = scores.get(seat) {
             let hot = if seat == turn { 2.0 } else { 0.0 };
@@ -220,9 +222,12 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
             let (lx, ly) = (-73.0 + col * 36.5, 186.0 + row * 50.0);
             let (x, y) = seat_xy(seat, lx, ly);
             let hot = if seat == last_mover && i + 1 == river.len() { 1.0 } else { 0.0 };
-            e.tile(x, y, 34.0, 48.0, rot, *t, hot);
+            // 捨て牌は全席とも牌の上が中央を向く（左右の席は 180° 返す）
+            let trot = if seat % 2 == 1 { rot + std::f32::consts::PI } else { rot };
+            e.tile(x, y, 34.0, 48.0, trot, *t, hot);
         }
-        // 手牌（下家＝視点席は表向き・ソート済み、他家は裏面）
+        // 手牌（視点席は表向き・ソート済み、他家は裏面。
+        // viewpoint = -1 は全席オープン、0..3 はその席のみ表向き）
         let mut hand = tiles_of(&state, "hands", seat);
         let n = hand.len();
         if n == 0 {
@@ -230,7 +235,8 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         }
         let (tw, th, gap) = (46.0f32, 64.0f32, 3.0f32);
         let total = n as f32 * (tw + gap) - gap;
-        if seat == 0 {
+        let face_up = viewpoint < 0 || viewpoint == seat as i32;
+        if face_up {
             // 赤ドラは通常の5の隣に並べる（DOM 版ビューアと同じキー）
             hand.sort_unstable_by_key(|&t| base_of(t) * 2 + if is_aka(t) { 1 } else { 0 });
             for (i, t) in hand.iter().enumerate() {

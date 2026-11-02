@@ -23,6 +23,21 @@
     border-radius:7px; padding:5px 9px; font-size:12px; cursor:pointer; white-space:nowrap; }
   #toolbar button:hover, #filelabel:hover { border-color:#f472b6; }
   #toolbar input[type=range] { width:110px; }
+  #toolbar select { background:#1e293b; color:#e2e8f0; border:1px solid #475569;
+    border-radius:8px; padding:5px 6px; font-size:12px; }
+  #toolbar button.primary { background:#334155; border-color:#f472b6; }
+  #toolbar { max-width:97vw; flex-wrap:wrap; justify-content:center; }
+  #jumps { position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:5;
+    display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-width:97vw; }
+  #jumps button { background:#1e293b; color:#e2e8f0; border:1px solid #475569;
+    border-radius:8px; font-size:12px; padding:4px 8px; cursor:pointer; }
+  #jumps button:hover { border-color:#f472b6; }
+  #results { position:fixed; left:10px; bottom:64px; z-index:5; display:none;
+    background:rgba(15,23,42,.92); border:1px solid #475569; border-radius:12px;
+    padding:10px 12px; font-size:13px; max-width:80vw; }
+  #results.open { display:block; }
+  #results table { border-collapse:collapse; }
+  #results td, #results th { padding:3px 10px 3px 0; text-align:left; }
   .turn { color:#fde68a; }
   #fallback { position:fixed; inset:0; display:none; place-items:center; color:#e2e8f0;
     background:#0b1220; text-align:center; padding:20px; }
@@ -52,11 +67,30 @@
 </div>
 <div id="toolbar">
   <label id="filelabel">牌譜ファイルを開く<input id="file" type="file" accept=".ndjson,.json,.txt" hidden></label>
+  <button id="first" title="最初の局面">⏮</button>
   <button id="prev" title="前の局面">◀</button>
+  <button id="play" class="primary">▶ 再生</button>
+  <button id="next" title="次の局面">▶|</button>
+  <button id="last" title="最後の局面">⏭</button>
   <input id="scrub" type="range" min="0" max="0" value="0" step="1">
-  <button id="next" title="次の局面">▶</button>
+  <select id="speed">
+    <option value="1600">0.5x</option>
+    <option value="900" selected>1x</option>
+    <option value="450">2x</option>
+    <option value="200">4x</option>
+  </select>
+  <select id="viewpoint">
+    <option value="-1" selected>視点：全席オープン</option>
+    <option value="0">視点：東家</option>
+    <option value="1">視点：南家</option>
+    <option value="2">視点：西家</option>
+    <option value="3">視点：北家</option>
+  </select>
+  <select id="roundsel"><option value="">局：選択</option></select>
   <span id="pos"></span>
 </div>
+<div id="jumps"></div>
+<section id="results"></section>
 <div id="fallback"><div>
   <p>このブラウザでは WebGPU が使えませんでした。</p>
   <p id="fallback-detail" style="color:#94a3b8;font-size:12px"></p>
@@ -473,6 +507,7 @@ async function main() {
   if (!navigator.gpu) throw new Error("no webgpu");
   await init();
   let states = [];
+  let footer = null;
   try {
     const saved = localStorage.getItem("paipu-webgpu-state");
     if (saved) {
@@ -485,8 +520,10 @@ async function main() {
   } else {
     const res = await fetch("../sample/sample-paipu.ndjson");
     const lines = (await res.text()).split(/\r?\n/).filter(l => l.trim());
-    const events = lines.slice(1, -1).map(l => JSON.parse(l));
+    const objs = lines.map(l => { try { return JSON.parse(l); } catch (e) { return null; } });
+    const events = objs.filter(o => o && o.type === "event" && o.state);
     states = events.map(e => e.state);
+    footer = objs.find(o => o && Array.isArray(o.results)) || null;
     document.getElementById("srcnote").textContent = "表示中：サンプル牌譜の最終局面";
   }
 
@@ -544,8 +581,61 @@ async function main() {
 
   // ---- 局面の管理（読み込んだ牌譜のステップ表示） ----
   let instBuf = null, instCount = 0, cur = states.length - 1;
+  let viewpoint = -1, playing = false, timer = null;
   const posEl = document.getElementById("pos");
   const scrubEl = document.getElementById("scrub");
+  const playBtn = document.getElementById("play");
+  const speedEl = document.getElementById("speed");
+  function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+  function roundLabelOf(st) {
+    if (!st) return "—";
+    if (typeof st.round_label === "string" && st.round_label) return st.round_label;
+    if (typeof st.round === "string") return st.round;
+    if (st.round && typeof st.round === "object") {
+      if (typeof st.round.label === "string") return st.round.label;
+      return (st.round.wind ?? "?") + (st.round.number ?? "?") + "局";
+    }
+    if (st.round_wind !== undefined && st.hand_index !== undefined)
+      return st.round_wind + (Number(st.hand_index) + 1) + "局";
+    return "—";
+  }
+  function stop() {
+    playing = false;
+    if (timer) { clearTimeout(timer); timer = null; }
+    playBtn.textContent = "▶ 再生";
+  }
+  function buildJumps() {
+    const j = document.getElementById("jumps"); j.innerHTML = "";
+    const sel = document.getElementById("roundsel");
+    sel.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = ""; ph.textContent = "局：選択"; sel.append(ph);
+    let last = null, count = 0;
+    states.forEach((s, i) => {
+      const label = roundLabelOf(s);
+      if (label === last) return;
+      last = label;
+      const o = document.createElement("option");
+      o.value = String(i); o.textContent = label; sel.append(o);
+      if (count >= 300) return; // ジャンプボタンの上限（DOM 版と同じ）
+      count++;
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.addEventListener("click", () => { stop(); applyState(i); });
+      j.append(b);
+    });
+  }
+  function renderResults() {
+    const res = document.getElementById("results");
+    const WIND = ["東", "南", "西", "北"];
+    if (footer && Array.isArray(footer.results) && footer.results.length) {
+      res.classList.add("open");
+      const rankOf = r => (typeof r.rank === "number" && Number.isFinite(r.rank)) ? r.rank : null;
+      const rows = [...footer.results].sort((a, b) => (rankOf(a) ?? 9) - (rankOf(b) ?? 9))
+        .map(r => { const rk = rankOf(r); return `<tr><td>${rk !== null ? rk + "位" : ""}</td><td>${escapeHtml(String(r.display_name ?? ""))}</td><td>${WIND[r.seat] ?? ""}席</td><td>${Number(r.score).toLocaleString()}点</td></tr>`; }).join("");
+      res.innerHTML = `<strong>最終結果</strong><table>${rows}</table>`;
+    } else { res.classList.remove("open"); res.innerHTML = ""; }
+  }
   function applyState(i) {
     if (!states.length) return;
     cur = Math.max(0, Math.min(i, states.length - 1));
@@ -558,7 +648,7 @@ async function main() {
     l2.textContent = `供託 ${s.kyotaku ?? 0}`;
     csubEl.append(l1, l2);
     let scene;
-    try { scene = new Float32Array(build_scene(JSON.stringify(s))); }
+    try { scene = new Float32Array(build_scene(JSON.stringify(s), viewpoint)); }
     catch (e) {
       document.getElementById("srcnote").textContent = "局面の構築に失敗しました";
       return;
@@ -582,8 +672,11 @@ async function main() {
       document.getElementById("srcnote").textContent = "読み込み失敗：イベントが見つかりません";
       return;
     }
+    stop();
     states = evs.map(e => e.state);
+    footer = objs.find(o => o && Array.isArray(o.results)) || null;
     document.getElementById("srcnote").textContent = `表示中：${name}（${states.length}局面）`;
+    buildJumps(); renderResults();
     applyState(states.length - 1);
   }
   const fileEl = document.getElementById("file");
@@ -598,9 +691,47 @@ async function main() {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
     if (f) f.text().then(t => loadPaipuText(t, f.name)).catch(() => {});
   });
-  document.getElementById("prev").addEventListener("click", () => applyState(cur - 1));
-  document.getElementById("next").addEventListener("click", () => applyState(cur + 1));
-  scrubEl.addEventListener("input", () => applyState(Number(scrubEl.value)));
+  document.getElementById("prev").addEventListener("click", () => { stop(); applyState(cur - 1); });
+  document.getElementById("next").addEventListener("click", () => { stop(); applyState(cur + 1); });
+  document.getElementById("first").addEventListener("click", () => { stop(); applyState(0); });
+  document.getElementById("last").addEventListener("click", () => { stop(); applyState(states.length - 1); });
+  scrubEl.addEventListener("input", () => { stop(); applyState(Number(scrubEl.value)); });
+  function tick() {
+    if (!playing) return;
+    if (cur >= states.length - 1) { stop(); return; }
+    applyState(cur + 1);
+    timer = setTimeout(tick, Number(speedEl.value));
+  }
+  playBtn.addEventListener("click", () => {
+    if (playing) { stop(); return; }
+    if (cur >= states.length - 1) applyState(0);
+    playing = true;
+    playBtn.textContent = "⏸ 一時停止";
+    timer = setTimeout(tick, Number(speedEl.value));
+  });
+  document.getElementById("viewpoint").addEventListener("change", (e) => {
+    viewpoint = Number(e.target.value);
+    applyState(cur);
+  });
+  document.getElementById("roundsel").addEventListener("change", (e) => {
+    if (e.target.value === "") return;
+    stop(); applyState(Number(e.target.value));
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.key === "ArrowLeft") { stop(); applyState(cur - 1); }
+    else if (e.key === "ArrowRight") { stop(); applyState(cur + 1); }
+    else if (e.key === " ") { e.preventDefault(); playBtn.click(); }
+  });
+  // ジャンプ／結果レイヤはツールバーの実際の高さの上に置く
+  const toolbarEl = document.getElementById("toolbar");
+  function fitBars() {
+    const bottom = (toolbarEl.offsetHeight + 20) + "px";
+    document.getElementById("jumps").style.bottom = bottom;
+    document.getElementById("results").style.bottom = bottom;
+  }
+  window.addEventListener("resize", fitBars);
+  buildJumps(); renderResults(); fitBars();
   // HUD は盤面の正方形（シェーダの half 計算と同じく短辺基準）に一致させる
   const boardhud = document.getElementById("boardhud");
   function fitHud() {

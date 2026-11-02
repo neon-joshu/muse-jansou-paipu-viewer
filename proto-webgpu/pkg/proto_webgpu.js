@@ -1,15 +1,17 @@
 /**
  * 牌譜 state（JSON文字列）からインスタンス列を作る
  * @param {string} state_json
+ * @param {number} viewpoint
  * @returns {Float32Array}
  */
-export function build_scene(state_json) {
+export function build_scene(state_json, viewpoint) {
+    const val2 = +viewpoint;
     const ptr0 = passStringToWasm0(state_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.build_scene(ptr0, len0);
-    var v2 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+    const ret = wasm.build_scene(ptr0, len0, val2);
+    var v3 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-    return v2;
+    return v3;
 }
 
 /**

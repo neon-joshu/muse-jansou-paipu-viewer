@@ -173,6 +173,7 @@
       <option value="2">視点：西家</option>
       <option value="3">視点：北家</option>
     </select>
+    <select id="roundsel"><option value="">局：選択</option></select>
     <span class="evinfo" id="evinfo"></span>
   </section>
   <div class="jumps" id="jumps"></div>
@@ -463,12 +464,18 @@ function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 
 function buildJumps(){
   const j = document.getElementById("jumps"); j.innerHTML = "";
+  const sel = document.getElementById("roundsel");
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = ""; ph.textContent = "局：選択"; sel.append(ph);
   if (!paipu) return;
   let last = null, count = 0;
   paipu.events.forEach((ev, i) => {
     const label = roundLabel(ev.state);
     if (label !== last){
       last = label;
+      const o = document.createElement("option");
+      o.value = String(i); o.textContent = label; sel.append(o);
       if (count >= 300) return; // ジャンプボタンの上限（細工された牌譜で DOM を膨らませない）
       count++;
       const b = document.createElement("button");
@@ -531,6 +538,10 @@ function play(){
 }
 document.getElementById("speed").onchange = () => { if (timer){ stop(); play(); } };
 document.getElementById("viewpoint").onchange = render;
+document.getElementById("roundsel").onchange = (e) => {
+  if (e.target.value === "") return;
+  stop(); idx = Number(e.target.value); render();
+};
 document.getElementById("scrub").oninput = e => { idx = Number(e.target.value); render(); };
 document.getElementById("btn-first").onclick = () => { stop(); idx = 0; render(); };
 document.getElementById("btn-last").onclick = () => { stop(); idx = paipu ? paipu.events.length - 1 : 0; render(); };
