@@ -394,7 +394,7 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
     var border = vec3<f32>(0.45, 0.48, 0.52);
     if (o.hot > 1.5) { border = vec3<f32>(1.0, 0.55, 0.15); }
     if (d > -0.055) { return vec4<f32>(border, 1.0); }
-    if (o.hot > 0.5 && o.hot < 1.5 || o.hot > 2.5) {
+    if ((o.hot > 0.5 && o.hot < 1.5) || o.hot > 2.5) {
       // 親：雀魂準拠の赤バッジ
       let bg = vec3<f32>(0.72, 0.16, 0.16);
       return vec4<f32>(mix(bg, vec3<f32>(0.05, 0.05, 0.05), sG.a), 1.0);
