@@ -22,7 +22,7 @@
   /* 対局ステータス行（本家観戦ページ風） */
   .statusline { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; font-size:17px; font-weight:700; padding:2px 2px 10px; }
   .statusline .sep { color:var(--dim); font-weight:400; }
-  .statusline .tile { width:26px; height:36px; font-size:14px; }
+  .statusline .tile { font-size:30px; }
   /* 席ロースター（本家観戦ページ風） */
   .roster { display:grid; grid-template-columns:1fr 1fr; gap:8px; background:rgba(20,83,45,.5); border:1px solid rgba(74,222,128,.4); border-radius:14px; padding:10px; margin-bottom:12px; }
   .rcard { background:rgba(22,101,52,.75); border-radius:10px; padding:8px 12px; min-height:64px; }
@@ -61,8 +61,8 @@
   .river-box[data-pos="left"] { grid-column:1; grid-row:2; }
   .river-box[data-pos="right"] { grid-column:3; grid-row:2; }
   .river-box.turn { box-shadow:inset 0 0 0 2px rgba(251,191,36,.45); }
-  .river { display:grid; grid-template-columns:repeat(6, 20px); gap:2px; }
-  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 20px); }
+  .river { display:grid; grid-template-columns:repeat(6, 30px); gap:2px; }
+  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 30px); }
   .center { grid-column:2; grid-row:2; position:relative; background:rgba(2,12,6,.78); border:1px solid rgba(74,222,128,.35); border-radius:12px; width:236px; height:168px; text-align:center; }
   .center .round { font-size:24px; font-weight:800; margin-top:38px; letter-spacing:.06em; }
   .center .sub { color:var(--dim); font-size:12px; margin-top:3px; }
@@ -74,19 +74,15 @@
   .cscore[data-pos="bottom"] { bottom:6px; left:50%; transform:translateX(-50%); }
   .cscore[data-pos="left"] { left:8px; top:50%; transform:translateY(-50%); }
   .cscore[data-pos="right"] { right:8px; top:50%; transform:translateY(-50%); }
-  /* 牌 */
-  .tile { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; width:26px; height:36px; background:linear-gradient(#ffffff,#e8e4da); color:#1f2937; border-radius:4px; border:1px solid #b6b0a1; box-shadow:0 1px 2px rgba(0,0,0,.45); font-size:14px; font-weight:700; line-height:1.05; flex:none; }
-  .tile .num { font-size:13px; }
-  .tile .suit { font-size:12px; }
-  .tile.s0 .suit { color:#7c2d12; } .tile.s1 .suit { color:#1d4ed8; } .tile.s2 .suit { color:#15803d; }
-  .tile.honor { font-size:16px; }
-  .tile.h-chun { color:#dc2626; } .tile.h-hatsu { color:#16a34a; } .tile.h-haku { color:#2563eb; }
-  .tile.back { background:linear-gradient(#991b1b,#7f1d1d); border-color:#450a0a; color:#fecaca; font-size:11px; }
-  .tile.river { width:20px; height:27px; }
-  .tile.river .num { font-size:10px; } .tile.river .suit { font-size:10px; } .tile.river.honor { font-size:12px; }
+  /* 牌（Unicode 麻雀絵文字で本家と同じ現実の図柄） */
+  .tile { display:inline-flex; align-items:center; justify-content:center; font-size:36px; line-height:1; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
+  .tile.back { width:26px; height:34px; border-radius:4px; border:1px solid #450a0a;
+    background:repeating-linear-gradient(45deg,#991b1b 0 4px,#7f1d1d 4px 8px); box-shadow:0 1px 2px rgba(0,0,0,.45); filter:none; }
+  .tile.river { font-size:28px; }
+  .tile.river.back { width:20px; height:26px; }
+  .statusline .tile { font-size:30px; }
   .rot90 { transform:rotate(90deg); } .rot180 { transform:rotate(180deg); } .rot270 { transform:rotate(-90deg); }
-  .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:11px 0; }
-  .river-box[data-pos="left"] .tile, .river-box[data-pos="right"] .tile { margin:0 4px; }
+  .river-box[data-pos="left"] .tile, .river-box[data-pos="right"] .tile { margin:0 3px; }
   .controls { margin-top:12px; background:var(--panel); border-radius:12px; padding:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .controls input[type="range"] { flex:1; min-width:160px; }
   .evinfo { font-variant-numeric:tabular-nums; color:var(--dim); font-size:13px; }
@@ -101,13 +97,16 @@
   .err { color:#fca5a5; white-space:pre-wrap; font-size:13px; }
   @media (max-width: 680px) {
     .statusline { font-size:14px; }
-    .tile { width:20px; height:28px; } .tile .num { font-size:10px; } .tile .suit { font-size:9px; } .tile.honor { font-size:12px; }
-    .tile.river { width:16px; height:22px; }
-    .river { grid-template-columns:repeat(6, 16px); }
-    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 16px); }
+    .tile { font-size:27px; }
+    .tile.back { width:20px; height:26px; }
+    .tile.river { font-size:21px; }
+    .tile.river.back { width:16px; height:21px; }
+    .statusline .tile { font-size:23px; }
+    .river { grid-template-columns:repeat(6, 23px); }
+    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 23px); }
     .river-box { min-width:0; min-height:76px; }
     .center { width:172px; height:150px; } .center .round { font-size:19px; margin-top:34px; }
-    .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:8px 0; }
+    .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:1px 0; }
     .hlabel { min-width:48px; } .hlabel .name { font-size:11px; }
     .rcard .rname { font-size:16px; }
   }
@@ -196,27 +195,23 @@ function tileVal(x){ // 捨て牌などは数値か {tile:n} のどちらか
   if (x && typeof x === "object" && typeof x.tile === "number") return x.tile;
   return -1;
 }
+// Unicode 麻雀牌（本家と同じ現実の図柄）: 萬子 U+1F007-, 筒子 U+1F019-, 索子 U+1F010-
+const HONOR_CP = [0x1F000, 0x1F001, 0x1F002, 0x1F003, 0x1F006, 0x1F005, 0x1F004]; // 東南西北白發中
+function tileGlyph(t){
+  if (t < 0 || t > 33) return "🀫";
+  if (t <= 8) return String.fromCodePoint(0x1F007 + t);
+  if (t <= 17) return String.fromCodePoint(0x1F019 + (t - 9));
+  if (t <= 26) return String.fromCodePoint(0x1F010 + (t - 18));
+  return String.fromCodePoint(HONOR_CP[t - 27]);
+}
 function tileEl(t, cls){
   const s = document.createElement("span");
-  let c = "tile" + (cls ? " " + cls : "");
-  if (t >= 27){
-    c += " honor";
-    if (t === 31) c += " h-haku"; else if (t === 32) c += " h-hatsu"; else if (t === 33) c += " h-chun";
-    s.className = c;
-    s.textContent = HONOR[t - 27];
-  } else if (t >= 0){
-    c += " s" + Math.floor(t / 9);
-    s.className = c;
-    const n = document.createElement("span"); n.className = "num"; n.textContent = NUM[t % 9];
-    const u = document.createElement("span"); u.className = "suit"; u.textContent = SUIT[Math.floor(t / 9)];
-    s.append(n, u);
-  } else {
-    s.className = c;
-    s.textContent = "?";
-  }
+  s.className = "tile" + (cls ? " " + cls : "");
+  s.textContent = tileGlyph(t);
+  s.title = tileLabel(t);
   return s;
 }
-function backEl(cls){ const s = document.createElement("span"); s.className = "tile back" + (cls ? " " + cls : ""); s.textContent = "🀄"; return s; }
+function backEl(cls){ const s = document.createElement("span"); s.className = "tile back" + (cls ? " " + cls : ""); s.title = "裏向きの牌"; return s; }
 
 let paipu = null;   // {header, events:[{seq,revision,kind,state}], footer}
 let idx = 0;
