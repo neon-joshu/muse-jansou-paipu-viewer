@@ -242,6 +242,16 @@ fn glyph_uv(idx: f32, uv: vec2<f32>) -> vec2<f32> {
 @fragment
 fn fs(o: VsOut) -> @location(0) vec4<f32> {
   let p = o.local;
+  // アトラス参照は uniform control flow が必要なため、条件分岐の前に一括で引く
+  let fuv0 = clamp(p / 0.85 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
+  let ga0 = clamp(o.glyph.x, 0.0, 16.0);
+  let gb0 = clamp(o.glyph.y, 0.0, 16.0);
+  let uvS = vec2<f32>(fuv0.x, fuv0.y * 0.92 + 0.04);
+  let sS = textureSample(atlas, samp, glyph_uv(ga0, clamp((uvS - 0.06) / 0.88, vec2<f32>(0.0), vec2<f32>(1.0))));
+  let uvT = vec2<f32>(fuv0.x, fuv0.y * 2.0);
+  let sT = textureSample(atlas, samp, glyph_uv(ga0, clamp(uvT * 0.86 + 0.07, vec2<f32>(0.0), vec2<f32>(1.0))));
+  let uvB = vec2<f32>(fuv0.x, fuv0.y * 2.0 - 1.0);
+  let sB = textureSample(atlas, samp, glyph_uv(gb0, clamp(uvB * 0.86 + 0.07, vec2<f32>(0.0), vec2<f32>(1.0))));
   // 卓フェルト
   if (o.kind > 0.5 && o.kind < 1.5) {
     let d = length(p);
@@ -298,21 +308,15 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
   } else if (o.glyph.x > -0.5) {
     if (o.glyph.y < -1.5) {
       // 字牌: 中央に単独
-      let uv = vec2<f32>(fuv.x, fuv.y * 0.92 + 0.04);
-      if (all(uv > vec2<f32>(0.06)) && all(uv < vec2<f32>(0.94))) {
-        let t = textureSample(atlas, samp, glyph_uv(o.glyph.x, (uv - 0.06) / 0.88));
-        face = mix(face, t.rgb, t.a);
+      if (all(uvS > vec2<f32>(0.06)) && all(uvS < vec2<f32>(0.94))) {
+        face = mix(face, sS.rgb, sS.a);
       }
     } else {
       // 萬子: 上に数字・下に萬
       if (fuv.y < 0.5) {
-        let uv = vec2<f32>(fuv.x, fuv.y * 2.0);
-        let t = textureSample(atlas, samp, glyph_uv(o.glyph.x, uv * 0.86 + 0.07));
-        face = mix(face, t.rgb, t.a);
+        face = mix(face, sT.rgb, sT.a);
       } else {
-        let uv = vec2<f32>(fuv.x, fuv.y * 2.0 - 1.0);
-        let t = textureSample(atlas, samp, glyph_uv(o.glyph.y, uv * 0.86 + 0.07));
-        face = mix(face, t.rgb, t.a);
+        face = mix(face, sB.rgb, sB.a);
       }
     }
   }
@@ -385,6 +389,9 @@ async function main() {
   const uniBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
   const module = device.createShaderModule({ code: WGSL });
+  const cinfo = await module.getCompilationInfo();
+  const cerr = cinfo.messages.filter(m => m.type === "error");
+  if (cerr.length) throw new Error("shader compile: " + cerr[0].message);
   const pipeline = device.createRenderPipeline({
     layout: "auto",
     vertex: {
