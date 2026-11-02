@@ -17,6 +17,7 @@ const G_MINUS: i32 = 27;
 const G_KYOKU: i32 = 28; // 局（白）
 const G_LWIND: i32 = 29; // 東南西北（白）が 29..=32
 const G_LKANJI: i32 = 33; // 一..九（白）が 33..=41
+const G_NOKORI: i32 = 42; // 残（白）
 
 /// 赤ドラ（34=赤5萬, 35=赤5筒, 36=赤5索）かどうか
 fn is_aka(tile: i32) -> bool {
@@ -123,7 +124,7 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
 
     // 卓フェルトと中央パネル
     e.push(0.0, 0.0, 1000.0, 1000.0, 0.0, -2, 0.0, 1.0);
-    e.push(0.0, 0.0, 330.0, 330.0, 0.0, -3, 0.0, 2.0);
+    e.push(0.0, 0.0, 300.0, 300.0, 0.0, -3, 0.0, 2.0);
 
     // ドラ表示牌（雀魂準拠で卓の右上に配置）
     let dora = state
@@ -137,6 +138,15 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
             e.tile(122.0 + i as f32 * 37.0, -302.0, 34.0, 48.0, 0.0, t as i32, 0.0);
         }
     }
+    // 残り牌数（ドラの左にグリフで表示）
+    if let Some(wall) = state.get("wall_count").and_then(|v| v.as_i64()) {
+        e.glyph(28.0, -302.0, 24.0, 0.0, G_NOKORI, 0.0);
+        for (j, ch) in wall.to_string().chars().enumerate() {
+            if let Some(dig) = ch.to_digit(10) {
+                e.glyph(58.0 + j as f32 * 17.0, -302.0, 20.0, 0.0, G_DIGIT0 + dig as i32, 0.0);
+            }
+        }
+    }
 
     let turn = state.get("turn").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
     let last_mover = (turn + 3) % 4;
@@ -145,9 +155,9 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     // 局表示（パネル中央にグリフで描く：東／南 + 一..四 + 局）
     let round_wind = state.get("round_wind").and_then(|v| v.as_i64()).unwrap_or(0);
     let hand_index = state.get("hand_index").and_then(|v| v.as_i64()).unwrap_or(0);
-    e.glyph(-50.0, -18.0, 46.0, 0.0, G_LWIND + round_wind as i32, 0.0);
-    e.glyph(0.0, -18.0, 46.0, 0.0, G_LKANJI + hand_index as i32, 0.0);
-    e.glyph(50.0, -18.0, 46.0, 0.0, G_KYOKU, 0.0);
+    e.glyph(-50.0, -16.0, 46.0, 0.0, G_LWIND + round_wind as i32, 0.0);
+    e.glyph(0.0, -16.0, 46.0, 0.0, G_LKANJI + hand_index as i32, 0.0);
+    e.glyph(50.0, -16.0, 46.0, 0.0, G_KYOKU, 0.0);
 
     // 各家の点数ブロック（パネルの自家側の辺に、風＋点数をグリフで描く）
     let scores: Vec<i64> = state
@@ -164,8 +174,8 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         let rot = seat_rot(seat);
         // 風（親は金で示す）
         let wind = (seat + 4 - dealer) % 4;
-        let (wx, wy) = seat_xy(seat, -72.0, 128.0);
-        e.glyph(wx, wy, 30.0, rot, G_LWIND + wind as i32, if seat == dealer { 1.0 } else { 0.0 });
+        let (wx, wy) = seat_xy(seat, -76.0, 112.0);
+        e.glyph(wx, wy, 34.0, rot, G_LWIND + wind as i32, if seat == dealer { 1.0 } else { 0.0 });
         // 点数（ツモ番は淡黄）
         if let Some(score) = scores.get(seat) {
             let hot = if seat == turn { 2.0 } else { 0.0 };
@@ -175,14 +185,9 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
                     '0'..='9' => G_DIGIT0 + (ch as i32 - '0' as i32),
                     _ => continue,
                 };
-                let (gx, gy) = seat_xy(seat, -38.0 + j as f32 * 24.5, 128.0);
-                e.glyph(gx, gy, 24.0, rot, g, hot);
+                let (gx, gy) = seat_xy(seat, -40.0 + j as f32 * 27.0, 112.0);
+                e.glyph(gx, gy, 27.0, rot, g, hot);
             }
-        }
-        // リーチ棒（パネルと河の境目）
-        if riichi.get(seat).copied().unwrap_or(false) {
-            let (sx, sy) = seat_xy(seat, 0.0, 170.5);
-            e.stick(sx, sy, rot);
         }
     }
 
@@ -193,7 +198,7 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         for (i, t) in river.iter().enumerate() {
             let col = (i % 6) as f32;
             let row = (i / 6) as f32;
-            let (lx, ly) = (-73.0 + col * 36.5, 176.0 + row * 50.0);
+            let (lx, ly) = (-73.0 + col * 36.5, 186.0 + row * 50.0);
             let (x, y) = seat_xy(seat, lx, ly);
             let hot = if seat == last_mover && i + 1 == river.len() { 1.0 } else { 0.0 };
             e.tile(x, y, 34.0, 48.0, rot, *t, hot);
@@ -220,6 +225,14 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
                 let (x, y) = seat_xy(seat, lx, 446.0);
                 e.tile(x, y, tw, th, rot, -1, 0.0);
             }
+        }
+    }
+
+    // リーチ棒は河・手牌より後に（手前に）描く。パネル縁と河の境目に置く
+    for seat in 0..4 {
+        if riichi.get(seat).copied().unwrap_or(false) {
+            let (sx, sy) = seat_xy(seat, 0.0, 156.0);
+            e.stick(sx, sy, seat_rot(seat));
         }
     }
 

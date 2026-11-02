@@ -31,12 +31,14 @@
     background:rgba(30,41,59,.9); border:1px solid #475569; border-radius:8px;
     padding:7px 12px; font-size:13px; text-decoration:none; }
   #switchbtn:hover { border-color:#f472b6; }
-  #srcnote { position:fixed; left:12px; bottom:56px; color:#94a3b8; font-size:11px;
+  #srcnote { position:fixed; left:12px; top:66px; color:#94a3b8; font-size:11px;
     text-shadow:0 1px 3px rgba(0,0,0,.8); }
+  #pos { white-space:nowrap; }
   @media (max-width: 600px) {
-    #title { font-size:12px; max-width:52vw; }
+    #title { font-size:11px; max-width:52vw; white-space:nowrap; overflow:hidden; }
     #title small { display:none; }
     #switchbtn { font-size:12px; padding:5px 9px; }
+    #toolbar input[type=range] { width:64px; }
   }
 </style>
 </head>
@@ -68,13 +70,13 @@ const GLYPHS = ["一","二","三","四","五","六","七","八","九","萬",
                 "東","南","西","北","白","發","中",
                 "0","1","2","3","4","5","6","7","8","9","-","局",
                 "東","南","西","北",
-                "一","二","三","四","五","六","七","八","九"];
+                "一","二","三","四","五","六","七","八","九","残"];
 const GLYPH_COLORS = ["#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a",
                       "#c0272d","#22304a","#22304a","#22304a","#22304a","#2563eb","#179b4a","#c0272d",
                       "#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9",
                       "#f1f5f9","#f8fafc",
                       "#f8fafc","#f8fafc","#f8fafc","#f8fafc",
-                      "#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc"];
+                      "#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc"];
 const FONT_SERIF = '700 88px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
 const FONT_SANS = '700 84px system-ui,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
 
@@ -237,7 +239,9 @@ fn pip_pos(n: i32, i: i32) -> vec2<f32> {
     let col = i % 2; let row = i / 2;
     if (n == 6) { return vec2<f32>(0.31 + 0.38 * f32(col), 0.24 + 0.26 * f32(row)); }
     if (n == 8) { return vec2<f32>(0.31 + 0.38 * f32(col), top + step * f32(row)); }
-    return vec2<f32>(0.31 + 0.38 * f32(col), 0.48 + 0.24 * f32(row - 1));
+    // 7: 上段の斜め3つ＋下段2x2（DOM 版 PIP_POS と同一配置）
+    let j = i - 3; let jcol = j % 2; let jrow = j / 2;
+    return vec2<f32>(0.31 + 0.38 * f32(jcol), 0.48 + 0.24 * f32(jrow));
   }
   // 9: 3x3
   let col = i % 3; let row = i / 3;
@@ -289,12 +293,10 @@ fn draw_pips(p: vec2<f32>, n: i32, base: vec3<f32>) -> vec3<f32> {
     let d = length(p - c);
     let aa = fwidth(d) * 1.2 + 0.001;
     let pc = pal(pip_col(n, i));
-    // 外から内へ：外周→溝→中心→芯穴。境界はすべて滑らかに混ぜる
+    // DOM 版と同じ3層構造：色 disc → 地の disc(0.62) → 色の中心(0.30)
     col = mix(col, pc, 1.0 - smoothstep(radius - aa, radius + aa, d));
-    col = mix(col, base, smoothstep(radius * 0.45 - aa, radius * 0.45 + aa, d)
-      * (1.0 - smoothstep(radius * 0.62 - aa, radius * 0.62 + aa, d)));
-    col = mix(col, pc, 1.0 - smoothstep(radius * 0.45 - aa, radius * 0.45 + aa, d));
-    col = mix(col, base, 1.0 - smoothstep(radius * 0.18 - aa, radius * 0.18 + aa, d));
+    col = mix(col, base, 1.0 - smoothstep(radius * 0.62 - aa, radius * 0.62 + aa, d));
+    col = mix(col, pc, 1.0 - smoothstep(radius * 0.30 - aa, radius * 0.30 + aa, d));
   }
   return col;
 }
@@ -317,18 +319,16 @@ fn draw_bamboo(p: vec2<f32>, n: i32, base: vec3<f32>) -> vec3<f32> {
     if (i >= n) { break; }
     let c = pip_pos(n, i);
     let q = p - c;
-    let d = sd_round_box(q, vec2<f32>(0.030, 0.085), 0.030);
+    let d = sd_round_box(q, vec2<f32>(0.034, 0.082), 0.034);
     let aa = fwidth(d) * 1.2 + 0.001;
     let cover = 1.0 - smoothstep(-aa, aa, d);
     if (cover > 0.0) {
       var pc = pal(1);
       if (n == 2 && i == 0) { pc = pal(0); }
       if (n == 5 && i == 4) { pc = pal(2); }
-      var bc = pc * (0.92 + 0.13 * (0.5 - abs(q.y) / 0.17));
-      let groove = 1.0 - smoothstep(0.005, 0.016, abs(q.y));   // 竹の節
-      bc = mix(bc, pc * 0.72, groove * 0.8);
-      let ridge = 1.0 - smoothstep(0.003, 0.013, abs(q.x));    // 中央の稜
-      bc = mix(bc, pc * 1.12, ridge * 0.7);
+      var bc = pc;
+      let node = 1.0 - smoothstep(0.004, 0.011, abs(q.y));   // 竹の節（細く弱く）
+      bc = mix(bc, pc * 0.62, node * 0.55);
       col = mix(col, bc, cover);
     }
   }
@@ -345,8 +345,8 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
   let p = o.local;
   // アトラス参照は uniform control flow が必要なため、条件分岐の前に一括で引く
   let fuv0 = clamp(p / 0.85 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
-  let ga0 = clamp(o.glyph.x, 0.0, 41.0);
-  let gb0 = clamp(o.glyph.y, 0.0, 41.0);
+  let ga0 = clamp(o.glyph.x, 0.0, 42.0);
+  let gb0 = clamp(o.glyph.y, 0.0, 42.0);
   let sG = textureSample(atlas, samp, glyph_uv(ga0, fuv0));
   let uvS = vec2<f32>(fuv0.x, fuv0.y * 0.92 + 0.04);
   let sS = textureSample(atlas, samp, glyph_uv(ga0, clamp((uvS - 0.06) / 0.88, vec2<f32>(0.0), vec2<f32>(1.0))));
@@ -536,7 +536,7 @@ async function main() {
     cur = Math.max(0, Math.min(i, states.length - 1));
     const s = states[cur];
     document.getElementById("csub").textContent =
-      `${s.honba ?? 0}本場 ・ 供託 ${s.kyotaku ?? 0} ・ 残り ${s.wall_count ?? "—"}`;
+      `${s.honba ?? 0}本場 ・ 供託 ${s.kyotaku ?? 0}`;
     let scene;
     try { scene = new Float32Array(build_scene(JSON.stringify(s))); }
     catch (e) {
