@@ -221,6 +221,8 @@ const PIP_COL = { // 0=青 1=緑 2=赤
 const PCOL = ["#2456c8", "#189a46", "#d43a2f"];
 const SERIF = '"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
 function tileSVG(t){
+  if (!Number.isInteger(t) || t < 0 || t > 36) // 不正な牌IDは空白フェイス（例外にしない）
+    return '<svg viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg"><rect x="0.75" y="0.75" width="28.5" height="38.5" rx="3.5" fill="#f8f5ec" stroke="#a8a294" stroke-width="1.5"/></svg>';
   const aka = isAka(t);
   const bt = baseTile(t); // 赤ドラは通常の5の顔で描く
   const faceBg = aka ? "#fbe9e7" : "#f8f5ec";
@@ -451,8 +453,9 @@ function render(){
   const res = document.getElementById("results");
   if (paipu && paipu.footer && Array.isArray(paipu.footer.results) && paipu.footer.results.length){
     res.classList.add("open");
-    const rows = [...paipu.footer.results].sort((a,b) => (a.rank||9) - (b.rank||9))
-      .map(r => `<tr><td>${r.rank ? r.rank + "位" : ""}</td><td>${escapeHtml(String(r.display_name ?? ""))}</td><td>${WIND[r.seat] ?? ""}席</td><td>${Number(r.score).toLocaleString()}点</td></tr>`).join("");
+    const rankOf = r => (typeof r.rank === "number" && Number.isFinite(r.rank)) ? r.rank : null; // rank は数値のときだけ表示（文字列を innerHTML に入れない）
+    const rows = [...paipu.footer.results].sort((a,b) => (rankOf(a) ?? 9) - (rankOf(b) ?? 9))
+      .map(r => { const rk = rankOf(r); return `<tr><td>${rk !== null ? rk + "位" : ""}</td><td>${escapeHtml(String(r.display_name ?? ""))}</td><td>${WIND[r.seat] ?? ""}席</td><td>${Number(r.score).toLocaleString()}点</td></tr>`; }).join("");
     res.innerHTML = `<strong>最終結果</strong><table>${rows}</table>`;
   } else { res.classList.remove("open"); res.innerHTML = ""; }
 }
@@ -461,11 +464,13 @@ function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 function buildJumps(){
   const j = document.getElementById("jumps"); j.innerHTML = "";
   if (!paipu) return;
-  let last = null;
+  let last = null, count = 0;
   paipu.events.forEach((ev, i) => {
     const label = roundLabel(ev.state);
     if (label !== last){
       last = label;
+      if (count >= 300) return; // ジャンプボタンの上限（細工された牌譜で DOM を膨らませない）
+      count++;
       const b = document.createElement("button");
       b.textContent = label;
       b.onclick = () => { stop(); idx = i; render(); };
@@ -474,9 +479,30 @@ function buildJumps(){
   });
 }
 
+// 入力検証（ペネトレーションテスト所見 F2/F3 への対応）：牌ID は 0〜36 の整数のみを
+// 受け付け、それ以外は -1（非表示）に倒す。配列サイズとイベント数にも上限を設け、
+// 細工された牌譜で描画が例外死したりメモリを食い潰されたりしないようにする。
+const MAX_EVENTS = 50000, MAX_HAND = 64, MAX_RIVER = 512, MAX_MELDS = 32, MAX_DORA = 16;
+function cleanTile(v){ const t = tileVal(v); return (Number.isInteger(t) && t >= 0 && t <= 36) ? t : -1; }
+function cleanTileArr(a, cap){ return Array.isArray(a) ? a.slice(0, cap).map(cleanTile) : a; }
+function sanitizeState(st){
+  if (!st || typeof st !== "object") return;
+  if (Array.isArray(st.hands)) st.hands = st.hands.map(a => cleanTileArr(a, MAX_HAND));
+  if (Array.isArray(st.discards)) st.discards = st.discards.map(a => cleanTileArr(a, MAX_RIVER));
+  if (Array.isArray(st.melds)){
+    st.melds = st.melds.map(seat => Array.isArray(seat) ? seat.slice(0, MAX_MELDS).map(g => {
+      if (Array.isArray(g)) return g.map(cleanTile);
+      if (g && Array.isArray(g.tiles)) return { ...g, tiles: g.tiles.map(cleanTile) };
+      return g;
+    }) : seat);
+  }
+  for (const key of ["dora", "dora_indicators"]) if (Array.isArray(st[key])) st[key] = cleanTileArr(st[key], MAX_DORA);
+}
+
 function loadText(text){
   const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length < 2) throw new Error("行が足りません（ヘッダー＋イベント列が必要です）");
+  if (lines.length > MAX_EVENTS + 2) throw new Error(`イベント数が上限（${MAX_EVENTS}）を超えています`);
   const parsed = lines.map((l, i) => { try { return JSON.parse(l); } catch(e){ throw new Error(`${i + 1}行目がJSONではありません`); } });
   const header = parsed[0];
   if (header.type !== "paipu_header") throw new Error("1行目が paipu_header ではありません");
@@ -485,6 +511,7 @@ function loadText(text){
   if (parsed[parsed.length - 1].type === "paipu_footer"){ footer = parsed.pop(); }
   const events = parsed.slice(1);
   for (const e of events) if (e.type !== "event" || !e.state) throw new Error("イベント行の形式が不正です");
+  for (const e of events) sanitizeState(e.state);
   paipu = { header, events, footer };
   idx = 0; stop();
   document.getElementById("filemeta").textContent =

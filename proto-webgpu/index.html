@@ -343,7 +343,7 @@ async function main() {
     const saved = localStorage.getItem("paipu-webgpu-state");
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed && Array.isArray(parsed.hands)) st = parsed;
+      if (parsed && Array.isArray(parsed.hands) && Array.isArray(parsed.scores)) st = parsed;
     }
   } catch(e) {}
   if (st) {
