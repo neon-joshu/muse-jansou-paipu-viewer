@@ -612,16 +612,17 @@ async function main() {
     const sel = document.getElementById("roundsel");
     sel.innerHTML = "";
     const ph = document.createElement("option");
-    ph.value = ""; ph.textContent = "局：選択"; sel.append(ph);
+    ph.value = ""; ph.textContent = "局・本場：選択"; sel.append(ph);
     let last = null, count = 0;
     states.forEach((s, i) => {
-      const label = roundLabelOf(s);
+      const hb = Number(s && s.honba) || 0;
+      const label = roundLabelOf(s) + " " + hb + "本場";
       if (label === last) return;
       last = label;
+      if (count >= 300) return; // ジャンプ先の上限（DOM 版と同じ）
+      count++;
       const o = document.createElement("option");
       o.value = String(i); o.textContent = label; sel.append(o);
-      if (count >= 300) return; // ジャンプボタンの上限（DOM 版と同じ）
-      count++;
       const b = document.createElement("button");
       b.textContent = label;
       b.addEventListener("click", () => { stop(); applyState(i); });
