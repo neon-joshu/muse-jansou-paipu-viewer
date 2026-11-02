@@ -72,6 +72,12 @@ impl Emitter {
             cx, cy, 88.0, 10.0, rot, -1.0, -1.0, -1.0, 0.0, 4.0,
         ]);
     }
+    /// 風バッジ（kind=5、パネルの四隅。hot=2 で番の家を光らせる）
+    fn badge(&mut self, cx: f32, cy: f32, rot: f32, wind_idx: i32, hot: f32) {
+        self.out.extend_from_slice(&[
+            cx, cy, 36.0, 36.0, rot, -1.0, (G_LWIND + wind_idx) as f32, -2.0, hot, 5.0,
+        ]);
+    }
 }
 
 /// 座席ローカル座標 → ワールド座標（y-down, 中心原点, 盤面 ±500）
@@ -126,7 +132,7 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     e.push(0.0, 0.0, 1000.0, 1000.0, 0.0, -2, 0.0, 1.0);
     e.push(0.0, 0.0, 300.0, 300.0, 0.0, -3, 0.0, 2.0);
 
-    // ドラ表示牌（雀魂準拠で卓の右上に配置）
+    // ドラ表示牌（雀魂リプレイUI準拠で卓の左上に配置）
     let dora = state
         .get("dora_indicators")
         .or_else(|| state.get("dora"))
@@ -135,16 +141,7 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         .unwrap_or_default();
     for (i, d) in dora.iter().take(5).enumerate() {
         if let Some(t) = d.as_i64() {
-            e.tile(122.0 + i as f32 * 37.0, -302.0, 34.0, 48.0, 0.0, t as i32, 0.0);
-        }
-    }
-    // 残り牌数（ドラの左にグリフで表示）
-    if let Some(wall) = state.get("wall_count").and_then(|v| v.as_i64()) {
-        e.glyph(28.0, -302.0, 24.0, 0.0, G_NOKORI, 0.0);
-        for (j, ch) in wall.to_string().chars().enumerate() {
-            if let Some(dig) = ch.to_digit(10) {
-                e.glyph(58.0 + j as f32 * 17.0, -302.0, 20.0, 0.0, G_DIGIT0 + dig as i32, 0.0);
-            }
+            e.tile(-468.0 + i as f32 * 37.0, -302.0, 34.0, 48.0, 0.0, t as i32, 0.0);
         }
     }
 
@@ -155,9 +152,22 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     // 局表示（パネル中央にグリフで描く：東／南 + 一..四 + 局）
     let round_wind = state.get("round_wind").and_then(|v| v.as_i64()).unwrap_or(0);
     let hand_index = state.get("hand_index").and_then(|v| v.as_i64()).unwrap_or(0);
-    e.glyph(-50.0, -16.0, 46.0, 0.0, G_LWIND + round_wind as i32, 0.0);
-    e.glyph(0.0, -16.0, 46.0, 0.0, G_LKANJI + hand_index as i32, 0.0);
-    e.glyph(50.0, -16.0, 46.0, 0.0, G_KYOKU, 0.0);
+    e.glyph(-50.0, -26.0, 46.0, 0.0, G_LWIND + round_wind as i32, 0.0);
+    e.glyph(0.0, -26.0, 46.0, 0.0, G_LKANJI + hand_index as i32, 0.0);
+    e.glyph(50.0, -26.0, 46.0, 0.0, G_KYOKU, 0.0);
+    // 残り牌数（雀魂準拠で局表示の下に「残＋数字」）
+    if let Some(wall) = state.get("wall_count").and_then(|v| v.as_i64()) {
+        let digits: Vec<char> = wall.to_string().chars().collect();
+        let total_w = 24.0 + digits.len() as f32 * 19.0;
+        let x0 = -total_w / 2.0;
+        e.glyph(x0 + 12.0, 30.0, 24.0, 0.0, G_NOKORI, 0.0);
+        for (j, ch) in digits.iter().enumerate() {
+            if let Some(dig) = ch.to_digit(10) {
+                e.glyph(x0 + 24.0 + 9.5 + j as f32 * 19.0, 30.0, 22.0, 0.0,
+                        G_DIGIT0 + dig as i32, 0.0);
+            }
+        }
+    }
 
     // 各家の点数ブロック（パネルの自家側の辺に、風＋点数をグリフで描く）
     let scores: Vec<i64> = state
@@ -172,20 +182,22 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         .unwrap_or_default();
     for seat in 0..4 {
         let rot = seat_rot(seat);
-        // 風（親は金で示す）
         let wind = (seat + 4 - dealer) % 4;
-        let (wx, wy) = seat_xy(seat, -76.0, 112.0);
-        e.glyph(wx, wy, 34.0, rot, G_LWIND + wind as i32, if seat == dealer { 1.0 } else { 0.0 });
-        // 点数（ツモ番は淡黄）
+        // 風バッジ（パネルの自家側の角。番の家はシェーダで橙に光る）
+        let (bx, by) = seat_xy(seat, -126.0, 126.0);
+        e.badge(bx, by, rot, wind as i32, if seat == turn { 2.0 } else { 0.0 });
+        // 点数（辺の中央にセンタリング。ツモ番は淡黄）
         if let Some(score) = scores.get(seat) {
             let hot = if seat == turn { 2.0 } else { 0.0 };
-            for (j, ch) in score.to_string().chars().enumerate() {
+            let text = score.to_string();
+            let x0 = -(text.chars().count() as f32) * 27.0 / 2.0 + 13.5;
+            for (j, ch) in text.chars().enumerate() {
                 let g = match ch {
                     '-' => G_MINUS,
                     '0'..='9' => G_DIGIT0 + (ch as i32 - '0' as i32),
                     _ => continue,
                 };
-                let (gx, gy) = seat_xy(seat, -40.0 + j as f32 * 27.0, 112.0);
+                let (gx, gy) = seat_xy(seat, x0 + j as f32 * 27.0, 110.0);
                 e.glyph(gx, gy, 27.0, rot, g, hot);
             }
         }

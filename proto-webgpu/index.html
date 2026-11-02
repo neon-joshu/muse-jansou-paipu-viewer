@@ -13,8 +13,8 @@
   #boardhud .hud { position:absolute; }
   #title { top:10px; left:12px; font-size:14px; font-weight:700; }
   #title small { display:block; font-weight:400; color:#94a3b8; font-size:11px; }
-  #center { left:50%; top:57.5%; transform:translate(-50%,-50%); text-align:center; }
-  #center .sub { font-size:12px; color:#cbd5e1; margin-top:2px; }
+  #info { left:2%; top:23.5%; text-align:left; }
+  #info .sub { font-size:12px; color:#cbd5e1; }
   #toolbar { position:fixed; left:50%; bottom:10px; transform:translateX(-50%); z-index:6;
     display:flex; align-items:center; gap:8px; max-width:94vw;
     background:rgba(15,23,42,.92); border:1px solid #334155; border-radius:10px; padding:7px 10px;
@@ -48,7 +48,7 @@
 <div id="srcnote"></div>
 <div class="hud" id="title">牌譜プレーヤー WebGPU プロトタイプ<small>Wasm シーン構築 + WebGPU 手続き描画（牌フェイスはシェーダ生成）</small></div>
 <div id="boardhud">
-  <div class="hud" id="center"><div class="sub" id="csub"></div></div>
+  <div class="hud" id="info"><div class="sub" id="csub"></div></div>
 </div>
 <div id="toolbar">
   <label id="filelabel">牌譜ファイルを開く<input id="file" type="file" accept=".ndjson,.json,.txt" hidden></label>
@@ -377,7 +377,7 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
     return vec4<f32>(sG.rgb * tint, sG.a);
   }
   // リーチ棒（白い棒＋中央の赤点）
-  if (o.kind > 3.5) {
+  if (o.kind > 3.5 && o.kind < 4.5) {
     let bar = sd_round_box(p, vec2<f32>(0.40, 0.37), 0.18);
     let aa = fwidth(bar) * 1.2 + 0.002;
     let cover = 1.0 - smoothstep(-aa, aa, bar);
@@ -386,6 +386,16 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
     let daa = fwidth(dd) * 1.2 + 0.02;
     col = mix(col, vec3<f32>(0.85, 0.15, 0.15), 1.0 - smoothstep(-daa, daa, dd));
     return vec4<f32>(col, cover);
+  }
+  // 風バッジ（パネルの四隅。hot=2 の番の家は枠が橙に光る）
+  if (o.kind > 4.5) {
+    let d = sd_round_box(p, vec2<f32>(0.44, 0.44), 0.10);
+    if (d > 0.0) { return vec4<f32>(0.0); }
+    var border = vec3<f32>(0.45, 0.48, 0.52);
+    if (o.hot > 1.5) { border = vec3<f32>(1.0, 0.55, 0.15); }
+    if (d > -0.055) { return vec4<f32>(border, 1.0); }
+    let bg = vec3<f32>(0.09, 0.12, 0.15);
+    return vec4<f32>(mix(bg, sG.rgb, sG.a), 1.0);
   }
   // 影（牌ローカルで右下にずらした角丸）
   let shadow_d = sd_round_box(p - vec2<f32>(0.045, 0.065), vec2<f32>(0.485, 0.485), 0.09);
