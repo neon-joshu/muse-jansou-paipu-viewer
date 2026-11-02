@@ -96,16 +96,22 @@
   .drop.over { border-color:var(--acc); color:var(--ink); }
   .err { color:#fca5a5; white-space:pre-wrap; font-size:13px; }
   @media (max-width: 680px) {
+    main { padding:8px; }
+    .board { padding:6px; gap:6px; }
     .statusline { font-size:14px; }
-    .tile { width:24px; height:32px; }
+    .tile { width:20px; height:27px; }
     .tile.river { width:18px; height:24px; }
-    .statusline .tile { width:22px; height:29px; }
+    .statusline .tile { width:20px; height:27px; }
+    .table { grid-template-columns:64px 1fr 64px; min-height:0; gap:4px; }
     .river { grid-template-columns:repeat(6, 20px); }
-    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 20px); }
-    .river-box { min-width:0; min-height:76px; }
-    .center { width:172px; height:150px; } .center .round { font-size:19px; margin-top:34px; }
+    .river-box { min-width:0; min-height:76px; padding:3px; }
+    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(3, 20px); }
+    .center { width:100%; max-width:196px; height:150px; } .center .round { font-size:19px; margin-top:34px; }
+    .hstrip { padding:5px 6px; }
+    .hstrip[data-pos="top"], .hstrip[data-pos="bottom"] { flex-wrap:wrap; }
+    .hand { gap:1px; }
     .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:1px 0; }
-    .hlabel { min-width:48px; } .hlabel .name { font-size:11px; }
+    .hlabel { min-width:40px; } .hlabel .name { font-size:11px; }
     .rcard .rname { font-size:16px; }
   }
 </style>
