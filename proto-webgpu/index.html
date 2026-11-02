@@ -24,10 +24,18 @@
   #fallback { position:fixed; inset:0; display:none; place-items:center; color:#e2e8f0;
     background:#0b1220; text-align:center; padding:20px; }
   #fallback a { color:#f472b6; }
+  #switchbtn { position:fixed; top:10px; right:12px; z-index:5; color:#e2e8f0;
+    background:rgba(30,41,59,.9); border:1px solid #475569; border-radius:8px;
+    padding:7px 12px; font-size:13px; text-decoration:none; }
+  #switchbtn:hover { border-color:#f472b6; }
+  #srcnote { position:fixed; left:12px; bottom:10px; color:#94a3b8; font-size:11px;
+    text-shadow:0 1px 3px rgba(0,0,0,.8); }
 </style>
 </head>
 <body>
 <canvas id="gpu"></canvas>
+<a id="switchbtn" href="../">旧版（DOM）で開く</a>
+<div id="srcnote"></div>
 <div class="hud" id="title">牌譜プレーヤー WebGPU プロトタイプ<small>Wasm シーン構築 + WebGPU 手続き描画（牌フェイスはシェーダ生成）</small></div>
 <div class="hud" id="center"><div class="round" id="round">—</div><div class="sub" id="csub"></div></div>
 <div class="hud score" id="s0"></div><div class="hud score" id="s1"></div>
@@ -319,10 +327,23 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
 async function main() {
   if (!navigator.gpu) throw new Error("no webgpu");
   await init();
-  const res = await fetch("../sample/sample-paipu.ndjson");
-  const lines = (await res.text()).split(/\r?\n/).filter(l => l.trim());
-  const events = lines.slice(1, -1).map(l => JSON.parse(l));
-  const st = events[events.length - 1].state;
+  let st = null;
+  try {
+    const saved = localStorage.getItem("paipu-webgpu-state");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && Array.isArray(parsed.hands)) st = parsed;
+    }
+  } catch(e) {}
+  if (st) {
+    document.getElementById("srcnote").textContent = "表示中：旧版から引き継いだ局面";
+  } else {
+    const res = await fetch("../sample/sample-paipu.ndjson");
+    const lines = (await res.text()).split(/\r?\n/).filter(l => l.trim());
+    const events = lines.slice(1, -1).map(l => JSON.parse(l));
+    st = events[events.length - 1].state;
+    document.getElementById("srcnote").textContent = "表示中：サンプル牌譜の最終局面";
+  }
   // HUD
   const WIND = ["東","南","西","北"];
   document.getElementById("round").textContent = st.round_label ?? "東1局";

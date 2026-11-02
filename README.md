@@ -24,6 +24,18 @@ python3 jansou_helper.py paipu            # 最新の終了半荘
 python3 jansou_helper.py paipu --match g0:initial --out paipu.ndjson
 ```
 
+## WebGPU プロトタイプ（proto-webgpu/）
+
+Wasm + WebGPU で描画する実験版。Rust コアが牌譜 state からシーン
+（インスタンス列）を構築し、WebGPU/WGSL が牌フェイスを手続き生成で描く
+（筒子＝同心ピップ、索子＝竹、萬子・字牌＝グリフアトラス）。旧版ヘッダーの
+「WebGPU版で開く」から、表示中の局面を引き継いで開ける。WebGPU が使えない
+環境では理由つきのフォールバック表示になり、旧版へのリンクを出す。
+
+公開: https://neon-joshu.github.io/muse-jansou-paipu-viewer/proto-webgpu/
+
+ビルド: `proto-webgpu/build.sh`（要 Rust + wasm32 ターゲット + wasm-bindgen CLI）
+
 ## サンプル
 
 `sample/sample-paipu.ndjson` に開発用サンプルを同梱（画面の「サンプル」ボタン）。
