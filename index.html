@@ -22,7 +22,7 @@
   /* 対局ステータス行（本家観戦ページ風） */
   .statusline { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; font-size:17px; font-weight:700; padding:2px 2px 10px; }
   .statusline .sep { color:var(--dim); font-weight:400; }
-  .statusline .tile { font-size:30px; }
+  .statusline .tile { font-size:38px; }
   /* 席ロースター（本家観戦ページ風） */
   .roster { display:grid; grid-template-columns:1fr 1fr; gap:8px; background:rgba(20,83,45,.5); border:1px solid rgba(74,222,128,.4); border-radius:14px; padding:10px; margin-bottom:12px; }
   .rcard { background:rgba(22,101,52,.75); border-radius:10px; padding:8px 12px; min-height:64px; }
@@ -75,12 +75,12 @@
   .cscore[data-pos="left"] { left:8px; top:50%; transform:translateY(-50%); }
   .cscore[data-pos="right"] { right:8px; top:50%; transform:translateY(-50%); }
   /* 牌（Unicode 麻雀絵文字で本家と同じ現実の図柄） */
-  .tile { display:inline-flex; align-items:center; justify-content:center; font-size:36px; line-height:1; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
+  .tile { display:inline-flex; align-items:center; justify-content:center; font-size:46px; line-height:1; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
   .tile.back { width:26px; height:34px; border-radius:4px; border:1px solid #450a0a;
     background:repeating-linear-gradient(45deg,#991b1b 0 4px,#7f1d1d 4px 8px); box-shadow:0 1px 2px rgba(0,0,0,.45); filter:none; }
-  .tile.river { font-size:28px; }
+  .tile.river { font-size:34px; }
   .tile.river.back { width:20px; height:26px; }
-  .statusline .tile { font-size:30px; }
+  .statusline .tile { font-size:38px; }
   .rot90 { transform:rotate(90deg); } .rot180 { transform:rotate(180deg); } .rot270 { transform:rotate(-90deg); }
   .river-box[data-pos="left"] .tile, .river-box[data-pos="right"] .tile { margin:0 3px; }
   .controls { margin-top:12px; background:var(--panel); border-radius:12px; padding:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
@@ -97,11 +97,11 @@
   .err { color:#fca5a5; white-space:pre-wrap; font-size:13px; }
   @media (max-width: 680px) {
     .statusline { font-size:14px; }
-    .tile { font-size:27px; }
+    .tile { font-size:34px; }
     .tile.back { width:20px; height:26px; }
-    .tile.river { font-size:21px; }
+    .tile.river { font-size:26px; }
     .tile.river.back { width:16px; height:21px; }
-    .statusline .tile { font-size:23px; }
+    .statusline .tile { font-size:29px; }
     .river { grid-template-columns:repeat(6, 23px); }
     .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 23px); }
     .river-box { min-width:0; min-height:76px; }
