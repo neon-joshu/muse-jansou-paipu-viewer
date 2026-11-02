@@ -25,55 +25,57 @@
   .statusline .tile { font-size:38px; }
   /* 席ロースター（本家観戦ページ風） */
   .roster { display:grid; grid-template-columns:1fr 1fr; gap:8px; background:rgba(20,83,45,.5); border:1px solid rgba(74,222,128,.4); border-radius:14px; padding:10px; margin-bottom:12px; }
-  .rcard { background:rgba(22,101,52,.75); border-radius:10px; padding:8px 12px; min-height:64px; }
+  .rcard { background:rgba(22,101,52,.75); border-radius:10px; padding:8px 12px; min-height:56px; }
   .rcard.turn { box-shadow:0 0 0 2px var(--gold); }
   .rcard .rwind { font-size:12px; color:#bbf7d0; }
   .rcard .rname { font-size:19px; font-weight:800; margin-top:1px; }
   .rcard .rscore { color:var(--gold); font-weight:700; font-variant-numeric:tabular-nums; font-size:14px; }
   .rcard .rtags { color:var(--acc); font-size:11px; min-height:13px; }
-  /* 盤面：四辺に手牌ストリップ、内側に河と中央パネル */
-  .board { background:radial-gradient(circle at 50% 45%, var(--felt2), var(--felt) 70%, var(--deep)); border-radius:16px; padding:10px; display:grid; gap:8px;
+  /* 盤面（本家観戦ページの構造）：四辺に手牌ストリップ、内側に河フレームと中央パネル */
+  .board { background:radial-gradient(circle at 50% 45%, var(--felt2), var(--felt) 70%, var(--deep)); border-radius:16px; padding:8px; display:grid; gap:6px;
     grid-template-columns: auto 1fr auto; grid-template-rows: auto 1fr auto;
     grid-template-areas: "top top top" "left table right" "bottom bottom bottom"; }
-  .hstrip { background:rgba(2,20,10,.55); border:1px solid rgba(148,163,184,.30); border-radius:12px; padding:6px 8px; display:flex; align-items:center; gap:8px; min-height:56px; }
-  .hstrip.turn { border-color:var(--gold); box-shadow:0 0 0 2px rgba(251,191,36,.35); }
+  .hstrip { background:rgba(22,101,52,.55); border:1px solid rgba(74,222,128,.35); border-radius:12px; padding:6px 8px; display:flex; align-items:center; gap:8px; min-height:54px; }
+  .hstrip.turn { border-color:var(--gold); box-shadow:0 0 0 2px rgba(251,191,36,.4); }
   .hstrip[data-pos="top"] { grid-area:top; }
   .hstrip[data-pos="bottom"] { grid-area:bottom; }
-  .hstrip[data-pos="left"] { grid-area:left; flex-direction:column; align-items:stretch; }
-  .hstrip[data-pos="right"] { grid-area:right; flex-direction:column; align-items:stretch; }
-  .hlabel { display:flex; flex-direction:column; line-height:1.25; min-width:64px; }
+  .hstrip[data-pos="left"] { grid-area:left; flex-direction:column; align-items:center; }
+  .hstrip[data-pos="right"] { grid-area:right; flex-direction:column; align-items:center; }
+  .hlabel { display:flex; flex-direction:column; line-height:1.3; min-width:58px; text-align:left; }
   .hstrip[data-pos="left"] .hlabel, .hstrip[data-pos="right"] .hlabel { text-align:center; min-width:0; }
-  .hlabel .wind { color:var(--gold); font-size:12px; font-weight:700; }
-  .hlabel .name { font-weight:700; font-size:13px; white-space:nowrap; }
-  .hlabel .score { color:#fde68a; font-variant-numeric:tabular-nums; font-size:13px; }
+  .hlabel .wind { color:#fde68a; font-size:12px; font-weight:700; }
+  .hlabel .score { color:var(--gold); font-weight:800; font-variant-numeric:tabular-nums; font-size:15px; }
   .hlabel .tags { color:var(--acc); font-size:11px; min-height:13px; }
+  .hnote { margin-left:auto; color:#fde68a; font-size:11px; white-space:nowrap; align-self:center; }
+  .hstrip[data-pos="left"] .hnote, .hstrip[data-pos="right"] .hnote { margin-left:0; margin-top:auto; writing-mode:vertical-rl; }
   .hand { display:flex; flex-wrap:nowrap; gap:2px; align-items:center; }
   .hstrip[data-pos="left"] .hand, .hstrip[data-pos="right"] .hand { flex-direction:column; flex-wrap:nowrap; }
   .melds { display:flex; gap:6px; }
   .hstrip[data-pos="left"] .melds, .hstrip[data-pos="right"] .melds { flex-direction:column; }
   .meld { display:flex; gap:1px; background:rgba(148,163,184,.12); padding:2px; border-radius:4px; }
   .hstrip[data-pos="left"] .meld, .hstrip[data-pos="right"] .meld { flex-direction:column; }
-  /* 内側テーブル */
-  .table { display:grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: 1fr auto 1fr; gap:6px; align-items:center; justify-items:center; min-height:340px; }
-  .river-box { background:rgba(2,20,10,.38); border-radius:10px; padding:5px; min-width:150px; min-height:92px; display:flex; align-items:flex-start; justify-content:center; }
-  .river-box[data-pos="top"] { grid-column:2; grid-row:1; }
-  .river-box[data-pos="bottom"] { grid-column:2; grid-row:3; }
-  .river-box[data-pos="left"] { grid-column:1; grid-row:2; }
-  .river-box[data-pos="right"] { grid-column:3; grid-row:2; }
+  /* 内側テーブル：河は固定サイズの角丸フレーム、隅に小セル */
+  .table { display:grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto 1fr auto; gap:6px; align-items:stretch; justify-items:stretch; }
+  .corner { background:rgba(2,20,10,.30); border:1px solid rgba(74,222,128,.18); border-radius:10px; min-width:26px; min-height:26px; }
+  .river-box { background:rgba(2,20,10,.42); border:1px solid rgba(74,222,128,.25); border-radius:10px; padding:6px; display:flex; align-items:flex-start; justify-content:flex-start; overflow:hidden; }
+  .river-box[data-pos="top"] { grid-column:2; grid-row:1; height:112px; }
+  .river-box[data-pos="bottom"] { grid-column:2; grid-row:3; height:112px; }
+  .river-box[data-pos="left"] { grid-column:1; grid-row:2; width:88px; }
+  .river-box[data-pos="right"] { grid-column:3; grid-row:2; width:88px; }
   .river-box.turn { box-shadow:inset 0 0 0 2px rgba(251,191,36,.45); }
   .river { display:grid; grid-template-columns:repeat(6, 25px); gap:2px; }
-  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 25px); }
-  .center { grid-column:2; grid-row:2; position:relative; background:rgba(2,12,6,.78); border:1px solid rgba(74,222,128,.35); border-radius:12px; width:236px; height:168px; text-align:center; }
-  .center .round { font-size:24px; font-weight:800; margin-top:38px; letter-spacing:.06em; }
+  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(3, 25px); }
+  .center { grid-column:2; grid-row:2; position:relative; background:rgba(2,12,6,.78); border:1px solid rgba(74,222,128,.35); border-radius:12px; min-height:190px; text-align:center; }
+  .center .round { font-size:26px; font-weight:800; margin-top:52px; letter-spacing:.06em; }
   .center .sub { color:var(--dim); font-size:12px; margin-top:3px; }
   .center .dora { margin-top:5px; display:flex; gap:2px; justify-content:center; align-items:center; font-size:11px; color:var(--dim); }
-  .cscore { position:absolute; font-size:12px; font-variant-numeric:tabular-nums; color:#fde68a; text-align:center; line-height:1.3; }
-  .cscore .cw { display:block; color:var(--dim); font-size:11px; }
-  .cscore.turn { color:var(--gold); font-weight:800; }
-  .cscore[data-pos="top"] { top:6px; left:50%; transform:translateX(-50%); }
-  .cscore[data-pos="bottom"] { bottom:6px; left:50%; transform:translateX(-50%); }
-  .cscore[data-pos="left"] { left:8px; top:50%; transform:translateY(-50%); }
-  .cscore[data-pos="right"] { right:8px; top:50%; transform:translateY(-50%); }
+  .cscore { position:absolute; font-size:14px; font-variant-numeric:tabular-nums; color:var(--gold); font-weight:700; text-align:center; line-height:1.3; }
+  .cscore .cw { display:block; color:var(--dim); font-size:11px; font-weight:400; }
+  .cscore.turn { color:#fde68a; }
+  .cscore[data-pos="top"] { top:8px; left:50%; transform:translateX(-50%); }
+  .cscore[data-pos="bottom"] { bottom:8px; left:50%; transform:translateX(-50%); }
+  .cscore[data-pos="left"] { left:12px; top:50%; transform:translateY(-50%); }
+  .cscore[data-pos="right"] { right:12px; top:50%; transform:translateY(-50%); }
   /* 牌（自前 SVG 描画：OS フォントに頼らないカラー図柄） */
   .tile { display:inline-block; width:30px; height:40px; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
   .tile svg { display:block; width:100%; height:100%; }
@@ -102,16 +104,20 @@
     .tile { width:20px; height:27px; }
     .tile.river { width:18px; height:24px; }
     .statusline .tile { width:20px; height:27px; }
-    .table { grid-template-columns:64px 1fr 64px; min-height:0; gap:4px; }
+    .table { gap:4px; }
     .river { grid-template-columns:repeat(6, 20px); }
-    .river-box { min-width:0; min-height:76px; padding:3px; }
+    .river-box { padding:3px; }
+    .river-box[data-pos="top"], .river-box[data-pos="bottom"] { height:84px; }
+    .river-box[data-pos="left"], .river-box[data-pos="right"] { width:64px; }
     .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(3, 20px); }
-    .center { width:100%; max-width:196px; height:150px; } .center .round { font-size:19px; margin-top:34px; }
+    .corner { min-width:14px; min-height:14px; }
+    .center { min-height:150px; } .center .round { font-size:19px; margin-top:36px; }
+    .hlabel { min-width:44px; } .hlabel .score { font-size:13px; }
+    .hnote { font-size:10px; }
     .hstrip { padding:5px 6px; }
     .hstrip[data-pos="top"], .hstrip[data-pos="bottom"] { flex-wrap:wrap; }
     .hand { gap:1px; }
     .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:1px 0; }
-    .hlabel { min-width:40px; } .hlabel .name { font-size:11px; }
     .rcard .rname { font-size:16px; }
   }
 </style>
@@ -139,7 +145,9 @@
     <div class="hstrip" data-pos="top"></div>
     <div class="hstrip" data-pos="left"></div>
     <div class="table">
+      <div class="corner"></div>
       <div class="river-box" data-pos="top"></div>
+      <div class="corner"></div>
       <div class="river-box" data-pos="left"></div>
       <div class="center">
         <div class="cscore" data-pos="top"></div>
@@ -151,7 +159,9 @@
         <div class="cscore" data-pos="bottom"></div>
       </div>
       <div class="river-box" data-pos="right"></div>
+      <div class="corner"></div>
       <div class="river-box" data-pos="bottom"></div>
+      <div class="corner"></div>
     </div>
     <div class="hstrip" data-pos="right"></div>
     <div class="hstrip" data-pos="bottom"></div>
@@ -365,9 +375,6 @@ function render(){
     card.className = "rcard" + (st && st.turn === seat ? " turn" : "");
     const w = document.createElement("div"); w.className = "rwind"; w.textContent = WIND[seat] + "席";
     const nm = document.createElement("div"); nm.className = "rname"; nm.textContent = st ? seatName(seat, st) : "—";
-    const sc = document.createElement("span"); sc.className = "rscore";
-    sc.textContent = st && Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() + "点" : "";
-    nm.append(" ", sc);
     const tg = document.createElement("div"); tg.className = "rtags";
     const tags = [];
     if (st && st.dealer === seat) tags.push("親");
@@ -391,12 +398,11 @@ function render(){
     strip.classList.toggle("turn", !!st && st.turn === seat);
     const label = document.createElement("div"); label.className = "hlabel";
     const w = document.createElement("span"); w.className = "wind"; w.textContent = WIND[seat] + "家";
-    const nm = document.createElement("span"); nm.className = "name"; nm.textContent = st ? seatName(seat, st) : "—";
     const sc = document.createElement("span"); sc.className = "score";
     sc.textContent = st && Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() : "";
     const tg = document.createElement("span"); tg.className = "tags";
     if (riichi.includes(seat)) tg.textContent = "リーチ";
-    label.append(w, nm, sc, tg);
+    label.append(w, sc, tg);
     strip.append(label);
     const rbox = document.querySelector(`.river-box[data-pos="${pos}"]`);
     rbox.innerHTML = "";
@@ -424,6 +430,9 @@ function render(){
         }
         strip.append(md);
       }
+      const note = document.createElement("span"); note.className = "hnote";
+      note.textContent = (vp === null || vp === seat) ? "手牌（公開中）" : "手牌（非公開）";
+      strip.append(note);
       const river = Array.isArray(st.discards) ? st.discards[seat] : null;
       if (Array.isArray(river)){
         const rv = document.createElement("div"); rv.className = "river";
