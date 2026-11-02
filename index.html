@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>牌譜プレーヤー — Muse雀荘 paipu viewer</title>
 <style>
-  :root { --felt:#14532d; --felt2:#166534; --panel:#0f172a; --panel2:#1e293b; --ink:#e2e8f0; --dim:#94a3b8; --acc:#f472b6; --gold:#fbbf24; }
+  :root { --felt:#14532d; --felt2:#166534; --deep:#052e16; --panel:#0f172a; --panel2:#1e293b; --ink:#e2e8f0; --dim:#94a3b8; --acc:#f472b6; --gold:#fbbf24; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background:#020617; color:var(--ink); }
+  body { margin:0; font-family: system-ui, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background:#010d05; color:var(--ink); }
   header { padding:10px 14px; background:var(--panel); display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   header h1 { font-size:16px; margin:0 10px 0 0; }
   header .meta { color:var(--dim); font-size:12px; }
@@ -19,31 +19,74 @@
   .loader { padding:10px 14px; background:#0b1220; display:none; }
   .loader.open { display:block; }
   main { padding:12px; max-width:1100px; margin:0 auto; }
-  .board { background:radial-gradient(circle at 50% 45%, var(--felt2), var(--felt)); border-radius:16px; padding:12px; display:grid; grid-template-columns: 1fr 240px 1fr; grid-template-rows: auto auto auto; gap:10px; }
-  .seat { background:rgba(2,6,23,.55); border:1px solid rgba(148,163,184,.35); border-radius:12px; padding:8px; min-height:118px; }
-  .seat.turn { border-color:var(--gold); box-shadow:0 0 0 2px rgba(251,191,36,.35); }
-  .seat.top { grid-column:2; grid-row:1; }
-  .seat.right { grid-column:3; grid-row:2; }
-  .seat.bottom { grid-column:2; grid-row:3; }
-  .seat.left { grid-column:1; grid-row:2; }
-  .center { grid-column:2; grid-row:2; background:rgba(2,6,23,.7); border-radius:12px; padding:10px; text-align:center; }
-  .center .round { font-size:22px; font-weight:700; }
-  .center .sub { color:var(--dim); font-size:12px; margin-top:2px; }
-  .shead { display:flex; justify-content:space-between; align-items:baseline; gap:6px; }
-  .sname { font-weight:700; }
-  .sname .wind { color:var(--gold); margin-right:4px; }
-  .sscore { font-variant-numeric:tabular-nums; color:#fde68a; }
-  .tags { font-size:11px; color:var(--acc); min-height:14px; }
-  .hand { margin-top:4px; display:flex; flex-wrap:wrap; gap:2px; }
-  .river { margin-top:6px; display:flex; flex-wrap:wrap; gap:2px; max-width:300px; }
-  .melds { margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; }
+  /* 対局ステータス行（本家観戦ページ風） */
+  .statusline { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; font-size:17px; font-weight:700; padding:2px 2px 10px; }
+  .statusline .sep { color:var(--dim); font-weight:400; }
+  .statusline .tile { width:26px; height:36px; font-size:14px; }
+  /* 席ロースター（本家観戦ページ風） */
+  .roster { display:grid; grid-template-columns:1fr 1fr; gap:8px; background:rgba(20,83,45,.5); border:1px solid rgba(74,222,128,.4); border-radius:14px; padding:10px; margin-bottom:12px; }
+  .rcard { background:rgba(22,101,52,.75); border-radius:10px; padding:8px 12px; min-height:64px; }
+  .rcard.turn { box-shadow:0 0 0 2px var(--gold); }
+  .rcard .rwind { font-size:12px; color:#bbf7d0; }
+  .rcard .rname { font-size:19px; font-weight:800; margin-top:1px; }
+  .rcard .rscore { color:var(--gold); font-weight:700; font-variant-numeric:tabular-nums; font-size:14px; }
+  .rcard .rtags { color:var(--acc); font-size:11px; min-height:13px; }
+  /* 盤面：四辺に手牌ストリップ、内側に河と中央パネル */
+  .board { background:radial-gradient(circle at 50% 45%, var(--felt2), var(--felt) 70%, var(--deep)); border-radius:16px; padding:10px; display:grid; gap:8px;
+    grid-template-columns: auto 1fr auto; grid-template-rows: auto 1fr auto;
+    grid-template-areas: "top top top" "left table right" "bottom bottom bottom"; }
+  .hstrip { background:rgba(2,20,10,.55); border:1px solid rgba(148,163,184,.30); border-radius:12px; padding:6px 8px; display:flex; align-items:center; gap:8px; min-height:56px; }
+  .hstrip.turn { border-color:var(--gold); box-shadow:0 0 0 2px rgba(251,191,36,.35); }
+  .hstrip[data-pos="top"] { grid-area:top; }
+  .hstrip[data-pos="bottom"] { grid-area:bottom; }
+  .hstrip[data-pos="left"] { grid-area:left; flex-direction:column; align-items:stretch; }
+  .hstrip[data-pos="right"] { grid-area:right; flex-direction:column; align-items:stretch; }
+  .hlabel { display:flex; flex-direction:column; line-height:1.25; min-width:64px; }
+  .hstrip[data-pos="left"] .hlabel, .hstrip[data-pos="right"] .hlabel { text-align:center; min-width:0; }
+  .hlabel .wind { color:var(--gold); font-size:12px; font-weight:700; }
+  .hlabel .name { font-weight:700; font-size:13px; white-space:nowrap; }
+  .hlabel .score { color:#fde68a; font-variant-numeric:tabular-nums; font-size:13px; }
+  .hlabel .tags { color:var(--acc); font-size:11px; min-height:13px; }
+  .hand { display:flex; flex-wrap:nowrap; gap:2px; align-items:center; }
+  .hstrip[data-pos="left"] .hand, .hstrip[data-pos="right"] .hand { flex-direction:column; flex-wrap:nowrap; }
+  .melds { display:flex; gap:6px; }
+  .hstrip[data-pos="left"] .melds, .hstrip[data-pos="right"] .melds { flex-direction:column; }
   .meld { display:flex; gap:1px; background:rgba(148,163,184,.12); padding:2px; border-radius:4px; }
-  .tile { display:inline-flex; align-items:center; justify-content:center; width:24px; height:32px; background:#f8fafc; color:#0f172a; border-radius:4px; border:1px solid #cbd5e1; font-size:13px; font-weight:700; line-height:1; }
-  .tile small { font-size:9px; font-weight:600; }
-  .tile.honor { color:#7c2d12; }
-  .tile.back { background:#7f1d1d; border-color:#991b1b; color:#fecaca; font-size:10px; }
-  .tile.river { width:20px; height:27px; font-size:11px; opacity:.92; }
-  .tile.dora { outline:2px solid var(--gold); }
+  .hstrip[data-pos="left"] .meld, .hstrip[data-pos="right"] .meld { flex-direction:column; }
+  /* 内側テーブル */
+  .table { display:grid; grid-template-columns: 1fr auto 1fr; grid-template-rows: 1fr auto 1fr; gap:6px; align-items:center; justify-items:center; min-height:340px; }
+  .river-box { background:rgba(2,20,10,.38); border-radius:10px; padding:5px; min-width:150px; min-height:92px; display:flex; align-items:flex-start; justify-content:center; }
+  .river-box[data-pos="top"] { grid-column:2; grid-row:1; }
+  .river-box[data-pos="bottom"] { grid-column:2; grid-row:3; }
+  .river-box[data-pos="left"] { grid-column:1; grid-row:2; }
+  .river-box[data-pos="right"] { grid-column:3; grid-row:2; }
+  .river-box.turn { box-shadow:inset 0 0 0 2px rgba(251,191,36,.45); }
+  .river { display:grid; grid-template-columns:repeat(6, 20px); gap:2px; }
+  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 20px); }
+  .center { grid-column:2; grid-row:2; position:relative; background:rgba(2,12,6,.78); border:1px solid rgba(74,222,128,.35); border-radius:12px; width:236px; height:168px; text-align:center; }
+  .center .round { font-size:24px; font-weight:800; margin-top:38px; letter-spacing:.06em; }
+  .center .sub { color:var(--dim); font-size:12px; margin-top:3px; }
+  .center .dora { margin-top:5px; display:flex; gap:2px; justify-content:center; align-items:center; font-size:11px; color:var(--dim); }
+  .cscore { position:absolute; font-size:12px; font-variant-numeric:tabular-nums; color:#fde68a; text-align:center; line-height:1.3; }
+  .cscore .cw { display:block; color:var(--dim); font-size:11px; }
+  .cscore.turn { color:var(--gold); font-weight:800; }
+  .cscore[data-pos="top"] { top:6px; left:50%; transform:translateX(-50%); }
+  .cscore[data-pos="bottom"] { bottom:6px; left:50%; transform:translateX(-50%); }
+  .cscore[data-pos="left"] { left:8px; top:50%; transform:translateY(-50%); }
+  .cscore[data-pos="right"] { right:8px; top:50%; transform:translateY(-50%); }
+  /* 牌 */
+  .tile { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; width:26px; height:36px; background:linear-gradient(#ffffff,#e8e4da); color:#1f2937; border-radius:4px; border:1px solid #b6b0a1; box-shadow:0 1px 2px rgba(0,0,0,.45); font-size:14px; font-weight:700; line-height:1.05; flex:none; }
+  .tile .num { font-size:13px; }
+  .tile .suit { font-size:12px; }
+  .tile.s0 .suit { color:#7c2d12; } .tile.s1 .suit { color:#1d4ed8; } .tile.s2 .suit { color:#15803d; }
+  .tile.honor { font-size:16px; }
+  .tile.h-chun { color:#dc2626; } .tile.h-hatsu { color:#16a34a; } .tile.h-haku { color:#2563eb; }
+  .tile.back { background:linear-gradient(#991b1b,#7f1d1d); border-color:#450a0a; color:#fecaca; font-size:11px; }
+  .tile.river { width:20px; height:27px; }
+  .tile.river .num { font-size:10px; } .tile.river .suit { font-size:10px; } .tile.river.honor { font-size:12px; }
+  .rot90 { transform:rotate(90deg); } .rot180 { transform:rotate(180deg); } .rot270 { transform:rotate(-90deg); }
+  .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:11px 0; }
+  .river-box[data-pos="left"] .tile, .river-box[data-pos="right"] .tile { margin:0 4px; }
   .controls { margin-top:12px; background:var(--panel); border-radius:12px; padding:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .controls input[type="range"] { flex:1; min-width:160px; }
   .evinfo { font-variant-numeric:tabular-nums; color:var(--dim); font-size:13px; }
@@ -56,6 +99,18 @@
   .drop { border:2px dashed #334155; border-radius:12px; padding:16px; text-align:center; color:var(--dim); margin-bottom:12px; }
   .drop.over { border-color:var(--acc); color:var(--ink); }
   .err { color:#fca5a5; white-space:pre-wrap; font-size:13px; }
+  @media (max-width: 680px) {
+    .statusline { font-size:14px; }
+    .tile { width:20px; height:28px; } .tile .num { font-size:10px; } .tile .suit { font-size:9px; } .tile.honor { font-size:12px; }
+    .tile.river { width:16px; height:22px; }
+    .river { grid-template-columns:repeat(6, 16px); }
+    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 16px); }
+    .river-box { min-width:0; min-height:76px; }
+    .center { width:172px; height:150px; } .center .round { font-size:19px; margin-top:34px; }
+    .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:8px 0; }
+    .hlabel { min-width:48px; } .hlabel .name { font-size:11px; }
+    .rcard .rname { font-size:16px; }
+  }
 </style>
 </head>
 <body>
@@ -75,17 +130,28 @@
 </div>
 <main>
   <div class="drop" id="drop">牌譜ファイル（.ndjson）をドロップしても読み込めます</div>
+  <div class="statusline" id="statusline">牌譜を読み込んでください</div>
+  <section class="roster" id="roster"></section>
   <section class="board" id="board">
-    <div class="seat top" data-pos="top"></div>
-    <div class="seat left" data-pos="left"></div>
-    <div class="center">
-      <div class="round" id="c-round">—</div>
-      <div class="sub" id="c-sub">牌譜を読み込んでください</div>
-      <div class="sub" id="c-dora"></div>
-      <div class="sub" id="c-wall"></div>
+    <div class="hstrip" data-pos="top"></div>
+    <div class="hstrip" data-pos="left"></div>
+    <div class="table">
+      <div class="river-box" data-pos="top"></div>
+      <div class="river-box" data-pos="left"></div>
+      <div class="center">
+        <div class="cscore" data-pos="top"></div>
+        <div class="cscore" data-pos="left"></div>
+        <div class="round" id="c-round">—</div>
+        <div class="sub" id="c-sub"></div>
+        <div class="dora" id="c-dora"></div>
+        <div class="cscore" data-pos="right"></div>
+        <div class="cscore" data-pos="bottom"></div>
+      </div>
+      <div class="river-box" data-pos="right"></div>
+      <div class="river-box" data-pos="bottom"></div>
     </div>
-    <div class="seat right" data-pos="right"></div>
-    <div class="seat bottom" data-pos="bottom"></div>
+    <div class="hstrip" data-pos="right"></div>
+    <div class="hstrip" data-pos="bottom"></div>
   </section>
   <section class="controls">
     <button id="btn-first">⏮</button>
@@ -119,6 +185,7 @@ const NUM = ["一","二","三","四","五","六","七","八","九"];
 const SUIT = ["萬","筒","索"];
 const HONOR = ["東","南","西","北","白","發","中"];
 const WIND = ["東","南","西","北"];
+const ROT = { bottom: "", right: " rot270", top: " rot180", left: " rot90" };
 function tileLabel(t){
   if (typeof t !== "number" || t < 0 || t > 33) return "?";
   if (t <= 26) return NUM[t % 9] + SUIT[Math.floor(t / 9)];
@@ -131,11 +198,25 @@ function tileVal(x){ // 捨て牌などは数値か {tile:n} のどちらか
 }
 function tileEl(t, cls){
   const s = document.createElement("span");
-  s.className = "tile" + (cls ? " " + cls : "") + (t >= 27 ? " honor" : "");
-  s.textContent = tileLabel(t);
+  let c = "tile" + (cls ? " " + cls : "");
+  if (t >= 27){
+    c += " honor";
+    if (t === 31) c += " h-haku"; else if (t === 32) c += " h-hatsu"; else if (t === 33) c += " h-chun";
+    s.className = c;
+    s.textContent = HONOR[t - 27];
+  } else if (t >= 0){
+    c += " s" + Math.floor(t / 9);
+    s.className = c;
+    const n = document.createElement("span"); n.className = "num"; n.textContent = NUM[t % 9];
+    const u = document.createElement("span"); u.className = "suit"; u.textContent = SUIT[Math.floor(t / 9)];
+    s.append(n, u);
+  } else {
+    s.className = c;
+    s.textContent = "?";
+  }
   return s;
 }
-function backEl(){ const s = document.createElement("span"); s.className = "tile back"; s.textContent = "🀄"; return s; }
+function backEl(cls){ const s = document.createElement("span"); s.className = "tile back" + (cls ? " " + cls : ""); s.textContent = "🀄"; return s; }
 
 let paipu = null;   // {header, events:[{seq,revision,kind,state}], footer}
 let idx = 0;
@@ -178,47 +259,96 @@ function seatName(seat, st){
 function render(){
   const ev = paipu ? paipu.events[idx] : null;
   const st = ev ? ev.state : null;
-  document.getElementById("c-round").textContent = st ? roundLabel(st) : "—";
-  document.getElementById("c-sub").textContent = st
-    ? (st.phase ?? "") + " / " + (ev.kind ?? "") : "牌譜を読み込んでください";
-  const dora = st ? (st.dora ?? st.dora_indicators ?? []) : [];
-  const cd = document.getElementById("c-dora");
-  cd.textContent = "";
-  if (st && dora.length){
-    cd.append("ドラ表示: ");
-    dora.map(tileVal).forEach(t => { if (t >= 0) cd.appendChild(tileEl(t)); });
-  }
-  document.getElementById("c-wall").textContent = st
-    ? `本場 ${st.honba ?? 0} ・ 供託 ${st.kyotaku ?? 0} ・ 残り ${st.wall_count ?? "?"}`
-    : "";
-  document.getElementById("evinfo").textContent = ev
-    ? `#${idx + 1}/${paipu.events.length} seq=${ev.seq} rev=${ev.revision}` : "";
-  document.getElementById("scrub").max = paipu ? String(paipu.events.length - 1) : "0";
-  document.getElementById("scrub").value = String(idx);
-
   const vpSel = document.getElementById("viewpoint").value;
   const vp = vpSel === "master" ? null : Number(vpSel);
   const base = vp ?? 0;
   const posSeat = { bottom: base, right: (base + 1) % 4, top: (base + 2) % 4, left: (base + 3) % 4 };
   const riichi = st ? riichiSeats(st) : [];
+  const dora = st ? (st.dora ?? st.dora_indicators ?? []) : [];
+
+  // ステータス行（本家風：東4局 1本場 / 供託 0 / 山 残り68枚 / ドラ表示 [牌]）
+  const sl = document.getElementById("statusline");
+  sl.innerHTML = "";
+  if (st){
+    sl.append(document.createTextNode(`${roundLabel(st)} ${st.honba ?? 0}本場`));
+    const sep = document.createElement("span"); sep.className = "sep"; sep.textContent = "/";
+    sl.append(sep, document.createTextNode(`供託 ${st.kyotaku ?? 0}`));
+    const sep2 = sep.cloneNode(); sep2.textContent = "/";
+    sl.append(sep2, document.createTextNode(`山 残り${st.wall_count ?? "?"}枚`));
+    if (dora.length){
+      const sep3 = sep.cloneNode(); sep3.textContent = "/";
+      sl.append(sep3, document.createTextNode("ドラ表示"));
+      dora.map(tileVal).forEach(t => { if (t >= 0) sl.appendChild(tileEl(t)); });
+    }
+  } else {
+    sl.textContent = "牌譜を読み込んでください";
+  }
+
+  // 中央パネル
+  document.getElementById("c-round").textContent = st ? roundLabel(st) : "—";
+  document.getElementById("c-sub").textContent = st
+    ? `${st.honba ?? 0}本場 / 供託 ${st.kyotaku ?? 0}` : "";
+  const cd = document.getElementById("c-dora");
+  cd.innerHTML = "";
+  if (st && dora.length){
+    cd.append(document.createTextNode("ドラ表示"));
+    dora.map(tileVal).forEach(t => { if (t >= 0) cd.appendChild(tileEl(t, "river")); });
+  }
   for (const [pos, seat] of Object.entries(posSeat)){
-    const box = document.querySelector(`.seat[data-pos="${pos}"]`);
-    box.innerHTML = "";
-    box.classList.toggle("turn", !!st && st.turn === seat);
-    const head = document.createElement("div"); head.className = "shead";
-    const nm = document.createElement("span"); nm.className = "sname";
-    nm.innerHTML = "";
-    const w = document.createElement("span"); w.className = "wind"; w.textContent = WIND[seat];
-    nm.append(w, document.createTextNode(seatName(seat, st)));
-    if (st && st.dealer === seat){ const d = document.createElement("span"); d.textContent = " 親"; d.style.color = "var(--gold)"; nm.append(d); }
-    const sc = document.createElement("span"); sc.className = "sscore";
-    sc.textContent = st && Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() : "";
-    head.append(nm, sc); box.append(head);
-    const tags = document.createElement("div"); tags.className = "tags";
-    if (riichi.includes(seat)) tags.textContent = "リーチ";
-    box.append(tags);
+    const cs = document.querySelector(`.cscore[data-pos="${pos}"]`);
+    cs.innerHTML = "";
+    cs.classList.toggle("turn", !!st && st.turn === seat);
     if (st){
-      // 手牌
+      const w = document.createElement("span"); w.className = "cw"; w.textContent = WIND[seat] + "家";
+      cs.append(w, document.createTextNode(Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() : ""));
+    }
+  }
+
+  // ロースター（席順）
+  const roster = document.getElementById("roster");
+  roster.innerHTML = "";
+  for (let seat = 0; seat < 4; seat++){
+    const card = document.createElement("div");
+    card.className = "rcard" + (st && st.turn === seat ? " turn" : "");
+    const w = document.createElement("div"); w.className = "rwind"; w.textContent = WIND[seat] + "席";
+    const nm = document.createElement("div"); nm.className = "rname"; nm.textContent = st ? seatName(seat, st) : "—";
+    const sc = document.createElement("span"); sc.className = "rscore";
+    sc.textContent = st && Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() + "点" : "";
+    nm.append(" ", sc);
+    const tg = document.createElement("div"); tg.className = "rtags";
+    const tags = [];
+    if (st && st.dealer === seat) tags.push("親");
+    if (riichi.includes(seat)) tags.push("リーチ");
+    if (st && st.turn === seat) tags.push("ツモ番");
+    tg.textContent = tags.join(" ・ ");
+    card.append(w, nm, tg);
+    roster.append(card);
+  }
+
+  document.getElementById("evinfo").textContent = ev
+    ? `#${idx + 1}/${paipu.events.length} seq=${ev.seq} rev=${ev.revision}` : "";
+  document.getElementById("scrub").max = paipu ? String(paipu.events.length - 1) : "0";
+  document.getElementById("scrub").value = String(idx);
+
+  // 手牌ストリップと河
+  for (const [pos, seat] of Object.entries(posSeat)){
+    const rot = ROT[pos];
+    const strip = document.querySelector(`.hstrip[data-pos="${pos}"]`);
+    strip.innerHTML = "";
+    strip.classList.toggle("turn", !!st && st.turn === seat);
+    const label = document.createElement("div"); label.className = "hlabel";
+    const w = document.createElement("span"); w.className = "wind"; w.textContent = WIND[seat] + "家";
+    const nm = document.createElement("span"); nm.className = "name"; nm.textContent = st ? seatName(seat, st) : "—";
+    const sc = document.createElement("span"); sc.className = "score";
+    sc.textContent = st && Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() : "";
+    const tg = document.createElement("span"); tg.className = "tags";
+    if (riichi.includes(seat)) tg.textContent = "リーチ";
+    label.append(w, nm, sc, tg);
+    strip.append(label);
+    const rbox = document.querySelector(`.river-box[data-pos="${pos}"]`);
+    rbox.innerHTML = "";
+    rbox.classList.toggle("turn", !!st && st.turn === seat);
+    if (st){
       const hand = Array.isArray(st.hands) ? st.hands[seat] : null;
       const handDiv = document.createElement("div"); handDiv.className = "hand";
       const visible = vp === null || vp === seat;
@@ -226,28 +356,26 @@ function render(){
         const sorted = [...hand].sort((a,b) => tileVal(a) - tileVal(b));
         for (const t of sorted){
           const v = tileVal(t);
-          handDiv.append(visible && v >= 0 ? tileEl(v) : backEl());
+          handDiv.append(visible && v >= 0 ? tileEl(v, rot.trim()) : backEl(rot.trim()));
         }
       }
-      box.append(handDiv);
-      // 鳴き
+      strip.append(handDiv);
       const melds = Array.isArray(st.melds) ? st.melds[seat] : null;
       if (Array.isArray(melds) && melds.length){
         const md = document.createElement("div"); md.className = "melds";
         for (const m of melds){
           const g = document.createElement("span"); g.className = "meld";
           const tiles = Array.isArray(m) ? m : (m && Array.isArray(m.tiles) ? m.tiles : []);
-          for (const t of tiles){ const v = tileVal(t); if (v >= 0) g.appendChild(tileEl(v)); }
+          for (const t of tiles){ const v = tileVal(t); if (v >= 0) g.appendChild(tileEl(v, rot.trim())); }
           if (g.childNodes.length) md.append(g);
         }
-        box.append(md);
+        strip.append(md);
       }
-      // 河
       const river = Array.isArray(st.discards) ? st.discards[seat] : null;
       if (Array.isArray(river)){
         const rv = document.createElement("div"); rv.className = "river";
-        for (const t of river){ const v = tileVal(t); if (v >= 0) rv.appendChild(tileEl(v, "river")); }
-        box.append(rv);
+        for (const t of river){ const v = tileVal(t); if (v >= 0) rv.appendChild(tileEl(v, "river" + rot)); }
+        rbox.append(rv);
       }
     }
   }
