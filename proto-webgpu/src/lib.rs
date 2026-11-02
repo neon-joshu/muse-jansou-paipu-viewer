@@ -132,7 +132,8 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     e.push(0.0, 0.0, 1000.0, 1000.0, 0.0, -2, 0.0, 1.0);
     e.push(0.0, 0.0, 300.0, 300.0, 0.0, -3, 0.0, 2.0);
 
-    // ドラ表示牌（雀魂リプレイUI準拠で卓の左上に配置）
+    // ドラ表示牌（捨て牌エリア左上の空きスペースに配置。
+    // 卓の左上端は左家の手牌列に隠れるため避ける）
     let dora = state
         .get("dora_indicators")
         .or_else(|| state.get("dora"))
@@ -141,7 +142,7 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         .unwrap_or_default();
     for (i, d) in dora.iter().take(5).enumerate() {
         if let Some(t) = d.as_i64() {
-            e.tile(-468.0 + i as f32 * 37.0, -302.0, 34.0, 48.0, 0.0, t as i32, 0.0);
+            e.tile(-292.0 + i as f32 * 37.0, -218.0, 34.0, 48.0, 0.0, t as i32, 0.0);
         }
     }
 
@@ -183,9 +184,15 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     for seat in 0..4 {
         let rot = seat_rot(seat);
         let wind = (seat + 4 - dealer) % 4;
-        // 風バッジ（パネルの自家側の角。番の家はシェーダで橙に光る）
-        let (bx, by) = seat_xy(seat, -126.0, 126.0);
-        e.badge(bx, by, rot, wind as i32, if seat == turn { 2.0 } else { 0.0 });
+        // 風バッジ（雀魂準拠でパネルの角の外側。親は赤地、番の家は橙枠）
+        let (bx, by) = seat_xy(seat, -167.0, 167.0);
+        let hot = match (seat == dealer, seat == turn) {
+            (true, true) => 3.0,
+            (true, false) => 1.0,
+            (false, true) => 2.0,
+            (false, false) => 0.0,
+        };
+        e.badge(bx, by, rot, wind as i32, hot);
         // 点数（辺の中央にセンタリング。ツモ番は淡黄）
         if let Some(score) = scores.get(seat) {
             let hot = if seat == turn { 2.0 } else { 0.0 };

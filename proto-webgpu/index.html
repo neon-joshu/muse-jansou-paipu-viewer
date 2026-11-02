@@ -13,7 +13,7 @@
   #boardhud .hud { position:absolute; }
   #title { top:10px; left:12px; font-size:14px; font-weight:700; }
   #title small { display:block; font-weight:400; color:#94a3b8; font-size:11px; }
-  #info { left:2%; top:23.5%; text-align:left; }
+  #info { left:20%; top:31.8%; text-align:left; line-height:1.5; }
   #info .sub { font-size:12px; color:#cbd5e1; }
   #toolbar { position:fixed; left:50%; bottom:10px; transform:translateX(-50%); z-index:6;
     display:flex; align-items:center; gap:8px; max-width:94vw;
@@ -387,13 +387,18 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
     col = mix(col, vec3<f32>(0.85, 0.15, 0.15), 1.0 - smoothstep(-daa, daa, dd));
     return vec4<f32>(col, cover);
   }
-  // 風バッジ（パネルの四隅。hot=2 の番の家は枠が橙に光る）
+  // 風バッジ（パネルの角の外側。hot: 1=親（赤地に黒字）、2=番（橙枠）、3=両方）
   if (o.kind > 4.5) {
     let d = sd_round_box(p, vec2<f32>(0.44, 0.44), 0.10);
     if (d > 0.0) { return vec4<f32>(0.0); }
     var border = vec3<f32>(0.45, 0.48, 0.52);
     if (o.hot > 1.5) { border = vec3<f32>(1.0, 0.55, 0.15); }
     if (d > -0.055) { return vec4<f32>(border, 1.0); }
+    if (o.hot > 0.5 && o.hot < 1.5 || o.hot > 2.5) {
+      // 親：雀魂準拠の赤バッジ
+      let bg = vec3<f32>(0.72, 0.16, 0.16);
+      return vec4<f32>(mix(bg, vec3<f32>(0.05, 0.05, 0.05), sG.a), 1.0);
+    }
     let bg = vec3<f32>(0.09, 0.12, 0.15);
     return vec4<f32>(mix(bg, sG.rgb, sG.a), 1.0);
   }
@@ -545,8 +550,13 @@ async function main() {
     if (!states.length) return;
     cur = Math.max(0, Math.min(i, states.length - 1));
     const s = states[cur];
-    document.getElementById("csub").textContent =
-      `${s.honba ?? 0}本場 ・ 供託 ${s.kyotaku ?? 0}`;
+    const csubEl = document.getElementById("csub");
+    csubEl.textContent = "";
+    const l1 = document.createElement("div");
+    l1.textContent = `${s.honba ?? 0}本場`;
+    const l2 = document.createElement("div");
+    l2.textContent = `供託 ${s.kyotaku ?? 0}`;
+    csubEl.append(l1, l2);
     let scene;
     try { scene = new Float32Array(build_scene(JSON.stringify(s))); }
     catch (e) {
