@@ -61,8 +61,8 @@
   .river-box[data-pos="left"] { grid-column:1; grid-row:2; }
   .river-box[data-pos="right"] { grid-column:3; grid-row:2; }
   .river-box.turn { box-shadow:inset 0 0 0 2px rgba(251,191,36,.45); }
-  .river { display:grid; grid-template-columns:repeat(6, 36px); gap:2px; }
-  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 36px); }
+  .river { display:grid; grid-template-columns:repeat(6, 25px); gap:2px; }
+  .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 25px); }
   .center { grid-column:2; grid-row:2; position:relative; background:rgba(2,12,6,.78); border:1px solid rgba(74,222,128,.35); border-radius:12px; width:236px; height:168px; text-align:center; }
   .center .round { font-size:24px; font-weight:800; margin-top:38px; letter-spacing:.06em; }
   .center .sub { color:var(--dim); font-size:12px; margin-top:3px; }
@@ -74,13 +74,13 @@
   .cscore[data-pos="bottom"] { bottom:6px; left:50%; transform:translateX(-50%); }
   .cscore[data-pos="left"] { left:8px; top:50%; transform:translateY(-50%); }
   .cscore[data-pos="right"] { right:8px; top:50%; transform:translateY(-50%); }
-  /* 牌（Unicode 麻雀絵文字で本家と同じ現実の図柄） */
-  .tile { display:inline-flex; align-items:center; justify-content:center; font-size:46px; line-height:1; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
-  .tile.back { width:26px; height:34px; border-radius:4px; border:1px solid #450a0a;
+  /* 牌（自前 SVG 描画：OS フォントに頼らないカラー図柄） */
+  .tile { display:inline-block; width:30px; height:40px; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
+  .tile svg { display:block; width:100%; height:100%; }
+  .tile.back { border-radius:4px; border:1px solid #450a0a;
     background:repeating-linear-gradient(45deg,#991b1b 0 4px,#7f1d1d 4px 8px); box-shadow:0 1px 2px rgba(0,0,0,.45); filter:none; }
-  .tile.river { font-size:34px; }
-  .tile.river.back { width:20px; height:26px; }
-  .statusline .tile { font-size:38px; }
+  .tile.river { width:23px; height:31px; }
+  .statusline .tile { width:27px; height:36px; }
   .rot90 { transform:rotate(90deg); } .rot180 { transform:rotate(180deg); } .rot270 { transform:rotate(-90deg); }
   .river-box[data-pos="left"] .tile, .river-box[data-pos="right"] .tile { margin:0 3px; }
   .controls { margin-top:12px; background:var(--panel); border-radius:12px; padding:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
@@ -97,13 +97,11 @@
   .err { color:#fca5a5; white-space:pre-wrap; font-size:13px; }
   @media (max-width: 680px) {
     .statusline { font-size:14px; }
-    .tile { font-size:34px; }
-    .tile.back { width:20px; height:26px; }
-    .tile.river { font-size:26px; }
-    .tile.river.back { width:16px; height:21px; }
-    .statusline .tile { font-size:29px; }
-    .river { grid-template-columns:repeat(6, 29px); }
-    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 29px); }
+    .tile { width:24px; height:32px; }
+    .tile.river { width:18px; height:24px; }
+    .statusline .tile { width:22px; height:29px; }
+    .river { grid-template-columns:repeat(6, 20px); }
+    .river-box[data-pos="left"] .river, .river-box[data-pos="right"] .river { grid-template-columns:repeat(4, 20px); }
     .river-box { min-width:0; min-height:76px; }
     .center { width:172px; height:150px; } .center .round { font-size:19px; margin-top:34px; }
     .hstrip[data-pos="left"] .tile, .hstrip[data-pos="right"] .tile { margin:1px 0; }
@@ -195,19 +193,73 @@ function tileVal(x){ // 捨て牌などは数値か {tile:n} のどちらか
   if (x && typeof x === "object" && typeof x.tile === "number") return x.tile;
   return -1;
 }
-// Unicode 麻雀牌（本家と同じ現実の図柄）: 萬子 U+1F007-, 筒子 U+1F019-, 索子 U+1F010-
-const HONOR_CP = [0x1F000, 0x1F001, 0x1F002, 0x1F003, 0x1F006, 0x1F005, 0x1F004]; // 東南西北白發中
-function tileGlyph(t){
-  if (t < 0 || t > 33) return "🀫";
-  if (t <= 8) return String.fromCodePoint(0x1F007 + t);
-  if (t <= 17) return String.fromCodePoint(0x1F019 + (t - 9));
-  if (t <= 26) return String.fromCodePoint(0x1F010 + (t - 18));
-  return String.fromCodePoint(HONOR_CP[t - 27]);
+// 牌フェイスの自前 SVG 描画（配置・色は WebGPU 版シェーダと共通の表）
+const PIP_POS = {
+  1: [[.5,.5]],
+  2: [[.5,.29],[.5,.71]],
+  3: [[.31,.27],[.5,.5],[.69,.73]],
+  4: [[.31,.29],[.69,.29],[.31,.71],[.69,.71]],
+  5: [[.31,.29],[.69,.29],[.5,.5],[.31,.71],[.69,.71]],
+  6: [[.31,.24],[.69,.24],[.31,.5],[.69,.5],[.31,.76],[.69,.76]],
+  7: [[.28,.15],[.5,.2],[.72,.25],[.31,.48],[.69,.48],[.31,.72],[.69,.72]],
+  8: [[.31,.17],[.69,.17],[.31,.39],[.69,.39],[.31,.61],[.69,.61],[.31,.83],[.69,.83]],
+  9: [[.27,.24],[.5,.24],[.73,.24],[.27,.5],[.5,.5],[.73,.5],[.27,.76],[.5,.76],[.73,.76]],
+};
+const PIP_COL = { // 0=青 1=緑 2=赤
+  2: [0,1], 3: [0,1,2], 4: [0,1,1,0], 5: [0,1,2,1,0],
+  6: [1,1,2,2,0,0], 7: [1,1,1,0,0,2,2], 8: [0,0,0,0,0,0,0,0], 9: [0,0,0,1,1,1,2,2,2],
+};
+const PCOL = ["#2456c8", "#189a46", "#d43a2f"];
+const SERIF = '"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
+function tileSVG(t){
+  const body = '<rect x="0.75" y="0.75" width="28.5" height="38.5" rx="3.5" fill="#f8f5ec" stroke="#a8a294" stroke-width="1.5"/>' +
+               '<rect x="2" y="34.5" width="26" height="3.5" rx="1.5" fill="#e3ddcb"/>';
+  let face = "";
+  const X = p => 3 + p[0] * 24, Y = p => 3 + p[1] * 34;
+  if (t >= 0 && t <= 8){ // 萬子
+    face = `<text x="15" y="16" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="12.5" fill="#22304a">${NUM[t]}</text>` +
+           `<text x="15" y="33.5" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="13.5" fill="#b3271e">萬</text>`;
+  } else if (t >= 9 && t <= 17){ // 筒子
+    const n = t - 8;
+    if (n === 1){
+      face = '<circle cx="15" cy="20" r="10.5" fill="none" stroke="#189a46" stroke-width="2.6"/>' +
+             '<circle cx="15" cy="20" r="7.4" fill="none" stroke="#2456c8" stroke-width="2.2"/>' +
+             '<circle cx="15" cy="20" r="4.2" fill="#d43a2f"/>';
+    } else {
+      const R = n >= 6 ? 2.9 : 3.4;
+      face = PIP_POS[n].map((p, i) => {
+        const c = PCOL[PIP_COL[n][i]], cx = X(p), cy = Y(p);
+        return `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${c}"/><circle cx="${cx}" cy="${cy}" r="${(R*0.62).toFixed(2)}" fill="#f8f5ec"/><circle cx="${cx}" cy="${cy}" r="${(R*0.3).toFixed(2)}" fill="${c}"/>`;
+      }).join("");
+    }
+  } else if (t >= 18 && t <= 26){ // 索子
+    const n = t - 17;
+    if (n === 1){
+      face = '<circle cx="15" cy="20" r="9.5" fill="#189a46"/><circle cx="15" cy="20" r="6.2" fill="#e8a713"/><circle cx="15" cy="20" r="3.2" fill="#d43a2f"/>' +
+             '<circle cx="7.5" cy="12" r="2.5" fill="#2456c8"/><circle cx="22.5" cy="12" r="2.5" fill="#2456c8"/>';
+    } else {
+      face = PIP_POS[n].map((p, i) => {
+        let c = "#189a46";
+        if (n === 2 && i === 0) c = "#2456c8";
+        if (n === 5 && i === 2) c = "#d43a2f";
+        const cx = X(p), cy = Y(p);
+        return `<rect x="${(cx-1.7).toFixed(2)}" y="${(cy-4.6).toFixed(2)}" width="3.4" height="9.2" rx="1.7" fill="${c}"/><rect x="${(cx-1.7).toFixed(2)}" y="${(cy-0.45).toFixed(2)}" width="3.4" height="0.9" fill="#0b5c2c"/>`;
+      }).join("");
+    }
+  } else if (t >= 27){ // 字牌
+    if (t === 31){ // 白：青枠
+      face = '<rect x="7.5" y="10" width="15" height="20" fill="none" stroke="#2456c8" stroke-width="1.8"/>';
+    } else {
+      const col = t === 32 ? "#189a46" : t === 33 ? "#d43a2f" : "#22304a";
+      face = `<text x="15" y="28" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="16" fill="${col}">${HONOR[t-27]}</text>`;
+    }
+  }
+  return `<svg viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">${body}${face}</svg>`;
 }
 function tileEl(t, cls){
   const s = document.createElement("span");
   s.className = "tile" + (cls ? " " + cls : "");
-  s.textContent = tileGlyph(t);
+  s.innerHTML = tileSVG(t);
   s.title = tileLabel(t);
   return s;
 }
