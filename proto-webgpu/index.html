@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>牌譜プレーヤー WebGPU プロトタイプ</title>
+<style>
+  html, body { margin:0; height:100%; background:#04150b; overflow:hidden;
+    font-family: system-ui, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
+  #gpu { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .hud { position:fixed; color:#e2e8f0; text-shadow:0 1px 3px rgba(0,0,0,.8); pointer-events:none; }
+  #title { top:10px; left:12px; font-size:14px; font-weight:700; }
+  #title small { display:block; font-weight:400; color:#94a3b8; font-size:11px; }
+  #center { left:50%; top:50%; transform:translate(-50%,-58%); text-align:center; }
+  #center .round { font-size:26px; font-weight:800; letter-spacing:.08em; }
+  #center .sub { font-size:12px; color:#cbd5e1; margin-top:2px; }
+  .score { font-size:15px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .score small { display:block; font-size:11px; color:#fbbf24; font-weight:700; }
+  #s0 { left:50%; bottom:118px; transform:translateX(-50%); text-align:center; }
+  #s2 { left:50%; top:104px; transform:translateX(-50%); text-align:center; }
+  #s1 { right:14px; top:50%; transform:translateY(-50%); text-align:right; }
+  #s3 { left:14px; top:50%; transform:translateY(-50%); }
+  .turn { color:#fde68a; }
+  #fallback { position:fixed; inset:0; display:none; place-items:center; color:#e2e8f0;
+    background:#0b1220; text-align:center; padding:20px; }
+  #fallback a { color:#f472b6; }
+</style>
+</head>
+<body>
+<canvas id="gpu"></canvas>
+<div class="hud" id="title">牌譜プレーヤー WebGPU プロトタイプ<small>Wasm シーン構築 + WebGPU 手続き描画（牌フェイスはシェーダ生成）</small></div>
+<div class="hud" id="center"><div class="round" id="round">—</div><div class="sub" id="csub"></div></div>
+<div class="hud score" id="s0"></div><div class="hud score" id="s1"></div>
+<div class="hud score" id="s2"></div><div class="hud score" id="s3"></div>
+<div id="fallback"><div>
+  <p>このブラウザでは WebGPU が使えませんでした。</p>
+  <p><a href="../">通常版（DOM）ビューア</a>はそのまま使えます。</p>
+</div></div>
+
+<script type="module">
+import init, { build_scene } from "./pkg/proto_webgpu.js";
+
+const GLYPHS = ["一","二","三","四","五","六","七","八","九","萬",
+                "東","南","西","北","白","發","中"];
+const GLYPH_COLORS = ["#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a",
+                      "#c0272d","#22304a","#22304a","#22304a","#22304a","#2563eb","#179b4a","#c0272d"];
+
+function makeAtlas() {
+  const cell = 128, cols = 8, rows = 3;
+  const cv = document.createElement("canvas");
+  cv.width = cell * cols; cv.height = cell * rows;
+  const ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = '700 88px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
+  GLYPHS.forEach((g, i) => {
+    ctx.fillStyle = GLYPH_COLORS[i];
+    ctx.fillText(g, (i % cols) * cell + cell / 2, Math.floor(i / cols) * cell + cell / 2 + 4);
+  });
+  return cv;
+}
+
+const WGSL = /* wgsl */`
+struct Uniforms { half: vec2<f32>, time: f32, pad: f32 };
+@group(0) @binding(0) var<uniform> U: Uniforms;
+@group(0) @binding(1) var atlas: texture_2d<f32>;
+@group(0) @binding(2) var samp: sampler;
+
+struct VsIn {
+  @location(0) corner: vec2<f32>,
+  @location(1) ipos: vec2<f32>,
+  @location(2) isize: vec2<f32>,
+  @location(3) irot: f32,
+  @location(4) itile: f32,
+  @location(5) iglyph: vec2<f32>,
+  @location(6) ihot: f32,
+  @location(7) ikind: f32,
+};
+struct VsOut {
+  @builtin(position) pos: vec4<f32>,
+  @location(0) local: vec2<f32>,
+  @location(1) tile: f32,
+  @location(2) glyph: vec2<f32>,
+  @location(3) hot: f32,
+  @location(4) kind: f32,
+};
+
+@vertex
+fn vs(v: VsIn) -> VsOut {
+  var o: VsOut;
+  let pulse = select(1.0, 1.0 + 0.05 * sin(U.time * 3.5), v.ihot > 0.5);
+  let half_size = v.isize * 0.5 * 1.18 * pulse;
+  let c = cos(v.irot); let s = sin(v.irot);
+  let rot = mat2x2<f32>(c, s, -s, c);
+  let off = rot * (v.corner * half_size);
+  let world = v.ipos + off;
+  o.pos = vec4<f32>(world.x / U.half.x, -world.y / U.half.y, 0.0, 1.0);
+  o.local = v.corner * 0.59 * pulse;
+  o.tile = v.itile; o.glyph = v.iglyph; o.hot = v.ihot; o.kind = v.ikind;
+  return o;
+}
+
+fn sd_round_box(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
+  let q = abs(p) - b + r;
+  return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+fn hash(p: vec2<f32>) -> f32 {
+  return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453);
+}
+
+// 筒子・索子の配置（フェイス座標 0..1, y-down）
+fn pip_pos(n: i32, i: i32) -> vec2<f32> {
+  if (n == 1) { return vec2<f32>(0.5, 0.5); }
+  if (n == 2) {
+    if (i == 0) { return vec2<f32>(0.5, 0.29); } return vec2<f32>(0.5, 0.71);
+  }
+  if (n == 3) {
+    if (i == 0) { return vec2<f32>(0.31, 0.27); }
+    if (i == 1) { return vec2<f32>(0.5, 0.5); } return vec2<f32>(0.69, 0.73);
+  }
+  if (n == 4 || n == 5) {
+    if (i == 0) { return vec2<f32>(0.31, 0.29); }
+    if (i == 1) { return vec2<f32>(0.69, 0.29); }
+    if (i == 2) { return vec2<f32>(0.31, 0.71); }
+    if (i == 3) { return vec2<f32>(0.69, 0.71); }
+    return vec2<f32>(0.5, 0.5);
+  }
+  if (n == 6 || n == 7 || n == 8) {
+    if (n == 7 && i < 3) {
+      if (i == 0) { return vec2<f32>(0.28, 0.15); }
+      if (i == 1) { return vec2<f32>(0.5, 0.20); } return vec2<f32>(0.72, 0.25);
+    }
+    let rows = select(3, 4, n == 8);
+    let top = select(0.24, 0.17, n == 8);
+    let step = select(0.26, 0.22, n == 8);
+    let col = i % 2; let row = i / 2;
+    if (n == 6) { return vec2<f32>(0.31 + 0.38 * f32(col), 0.24 + 0.26 * f32(row)); }
+    if (n == 8) { return vec2<f32>(0.31 + 0.38 * f32(col), top + step * f32(row)); }
+    return vec2<f32>(0.31 + 0.38 * f32(col), 0.48 + 0.24 * f32(row - 1));
+  }
+  // 9: 3x3
+  let col = i % 3; let row = i / 3;
+  return vec2<f32>(0.27 + 0.23 * f32(col), 0.24 + 0.26 * f32(row));
+}
+
+// 0=青 1=緑 2=赤
+fn pip_col(n: i32, i: i32) -> i32 {
+  if (n == 2) { return i; }                       // 青・緑
+  if (n == 3) { return i; }                       // 青・緑・赤
+  if (n == 4) { return select(1, 0, i == 0 || i == 3); }
+  if (n == 5) { if (i == 4) { return 2; } return select(1, 0, i == 0 || i == 3); }
+  if (n == 6) { if (i < 2) { return 1; } if (i < 4) { return 2; } return 0; }
+  if (n == 7) { if (i < 3) { return 1; } if (i < 5) { return 0; } return 2; }
+  if (n == 8) { return 0; }
+  if (n == 9) { let r = i / 3; if (r == 0) { return 0; } if (r == 1) { return 1; } return 2; }
+  return 1;
+}
+fn pal(i: i32) -> vec3<f32> {
+  if (i == 0) { return vec3<f32>(0.13, 0.32, 0.78); }  // 青
+  if (i == 1) { return vec3<f32>(0.08, 0.58, 0.28); }  // 緑
+  return vec3<f32>(0.80, 0.13, 0.16);                    // 赤
+}
+
+fn draw_pips(p: vec2<f32>, n: i32, base: vec3<f32>) -> vec3<f32> {
+  var col = base;
+  if (n == 1) {
+    // 一筒: 大きな多重リングのメダリオン
+    let d = length(p - vec2<f32>(0.5, 0.5));
+    let ang = atan2(p.y - 0.5, p.x - 0.5);
+    let petal = 1.0 + 0.10 * sin(ang * 8.0);
+    let r = d * petal;
+    if (r < 0.30) {
+      if (r > 0.24) { col = pal(1); }
+      else if (r > 0.17) { col = base; }
+      else if (r > 0.10) { col = pal(0); }
+      else { col = pal(2); }
+    }
+    return col;
+  }
+  let radius = select(0.105, 0.088, n >= 6);
+  for (var i = 0; i < 9; i++) {
+    if (i >= n) { break; }
+    let c = pip_pos(n, i);
+    let d = length(p - c);
+    if (d < radius) {
+      let pc = pal(pip_col(n, i));
+      if (d > radius * 0.62) { col = pc; }              // 外リング
+      else if (d > radius * 0.45) { col = base; }       // 溝
+      else { col = pc; }                                 // 中心
+      if (d < radius * 0.18) { col = base; }
+    }
+  }
+  return col;
+}
+
+fn draw_bamboo(p: vec2<f32>, n: i32, base: vec3<f32>) -> vec3<f32> {
+  var col = base;
+  if (n == 1) {
+    // 一索: メダリオンで代用（孔雀の意匠の抽象化）
+    let d = length(p - vec2<f32>(0.5, 0.5));
+    let ang = atan2(p.y - 0.5, p.x - 0.5);
+    let r = d * (1.0 + 0.13 * sin(ang * 6.0));
+    if (r < 0.31) {
+      if (r > 0.23) { col = pal(1); }
+      else if (r > 0.15) { col = pal(2); }
+      else { col = pal(1); }
+      if (r < 0.06) { col = pal(2); }
+    }
+    return col;
+  }
+  for (var i = 0; i < 9; i++) {
+    if (i >= n) { break; }
+    let c = pip_pos(n, i);
+    let q = p - c;
+    let d = sd_round_box(q, vec2<f32>(0.030, 0.085), 0.030);
+    if (d < 0.0) {
+      var pc = pal(1);
+      if (n == 2 && i == 0) { pc = pal(0); }
+      if (n == 5 && i == 4) { pc = pal(2); }
+      col = pc * (0.92 + 0.13 * (0.5 - abs(q.y) / 0.17));
+      if (abs(q.y) < 0.010) { col = pc * 0.72; }        // 竹の節
+      if (abs(q.x) < 0.008) { col = pc * 1.12; }        // 中央の稜
+    }
+  }
+  return col;
+}
+
+fn glyph_uv(idx: f32, uv: vec2<f32>) -> vec2<f32> {
+  let col = idx % 8.0; let row = floor(idx / 8.0);
+  return vec2<f32>((col + uv.x) / 8.0, (row + uv.y) / 3.0);
+}
+
+@fragment
+fn fs(o: VsOut) -> @location(0) vec4<f32> {
+  let p = o.local;
+  // 卓フェルト
+  if (o.kind > 0.5 && o.kind < 1.5) {
+    let d = length(p);
+    var col = mix(vec3<f32>(0.075, 0.36, 0.16), vec3<f32>(0.012, 0.10, 0.045), smoothstep(0.1, 0.85, d));
+    col *= 0.97 + 0.05 * hash(floor(p * 220.0));
+    return vec4<f32>(col, 1.0);
+  }
+  // 中央パネル
+  if (o.kind > 1.5) {
+    let d = sd_round_box(p, vec2<f32>(0.46, 0.46), 0.06);
+    if (d > 0.0) { return vec4<f32>(0.0); }
+    var col = vec3<f32>(0.030, 0.055, 0.045);
+    if (d > -0.012) { col = vec3<f32>(0.72, 0.55, 0.20); }
+    return vec4<f32>(col, 0.94);
+  }
+  // 影（牌ローカルで右下にずらした角丸）
+  let shadow_d = sd_round_box(p - vec2<f32>(0.045, 0.065), vec2<f32>(0.485, 0.485), 0.09);
+  let shadow = (1.0 - smoothstep(0.0, 0.10, shadow_d)) * 0.34;
+  // 牌本体
+  let body_d = sd_round_box(p, vec2<f32>(0.485, 0.485), 0.09);
+  if (body_d > 0.0) {
+    return vec4<f32>(vec3<f32>(0.0), shadow);
+  }
+  // 厚み（下端）とベベル
+  var body = mix(vec3<f32>(0.985, 0.975, 0.94), vec3<f32>(0.82, 0.84, 0.86),
+                 smoothstep(0.18, 0.5, p.y));
+  if (p.y > 0.40) { body = vec3<f32>(0.62, 0.65, 0.69); }
+  if (body_d > -0.035) { body *= 0.90; }
+  var alpha = 1.0;
+  // 裏面
+  if (o.tile < -0.5) {
+    let face_d = sd_round_box(p, vec2<f32>(0.42, 0.42), 0.07);
+    if (face_d < 0.0) {
+      var c = vec3<f32>(0.55, 0.16, 0.13);
+      let g = abs(fract((p.x + p.y) * 9.0) - 0.5);
+      let g2 = abs(fract((p.x - p.y) * 9.0) - 0.5);
+      if (min(g, g2) < 0.06) { c *= 0.82; }
+      c *= 0.95 + 0.10 * (0.5 - p.y);
+      return vec4<f32>(c, 1.0);
+    }
+    return vec4<f32>(body, 1.0);
+  }
+  // フェイス面
+  let face_d = sd_round_box(p, vec2<f32>(0.425, 0.425), 0.065);
+  if (face_d > 0.0) { return vec4<f32>(body, alpha); }
+  var face = vec3<f32>(0.995, 0.99, 0.965);
+  face *= 0.97 + 0.05 * (0.5 - p.y);
+  let fuv = p / 0.85 + 0.5;   // フェイス座標 0..1
+  let tile = i32(o.tile + 0.5);
+  if (tile >= 9 && tile <= 17) {
+    face = draw_pips(fuv, tile - 8, face);
+  } else if (tile >= 18 && tile <= 26) {
+    face = draw_bamboo(fuv, tile - 17, face);
+  } else if (o.glyph.x > -0.5) {
+    if (o.glyph.y < -1.5) {
+      // 字牌: 中央に単独
+      let uv = vec2<f32>(fuv.x, fuv.y * 0.92 + 0.04);
+      if (all(uv > vec2<f32>(0.06)) && all(uv < vec2<f32>(0.94))) {
+        let t = textureSample(atlas, samp, glyph_uv(o.glyph.x, (uv - 0.06) / 0.88));
+        face = mix(face, t.rgb, t.a);
+      }
+    } else {
+      // 萬子: 上に数字・下に萬
+      if (fuv.y < 0.5) {
+        let uv = vec2<f32>(fuv.x, fuv.y * 2.0);
+        let t = textureSample(atlas, samp, glyph_uv(o.glyph.x, uv * 0.86 + 0.07));
+        face = mix(face, t.rgb, t.a);
+      } else {
+        let uv = vec2<f32>(fuv.x, fuv.y * 2.0 - 1.0);
+        let t = textureSample(atlas, samp, glyph_uv(o.glyph.y, uv * 0.86 + 0.07));
+        face = mix(face, t.rgb, t.a);
+      }
+    }
+  }
+  if (o.hot > 0.5) {
+    let glow = 0.5 + 0.5 * sin(U.time * 3.5);
+    face = mix(face, vec3<f32>(1.0, 0.75, 0.25), 0.18 * glow);
+  }
+  return vec4<f32>(face, 1.0);
+}
+`;
+
+async function main() {
+  if (!navigator.gpu) throw new Error("no webgpu");
+  await init();
+  const res = await fetch("../sample/sample-paipu.ndjson");
+  const lines = (await res.text()).split(/\r?\n/).filter(l => l.trim());
+  const events = lines.slice(1, -1).map(l => JSON.parse(l));
+  const st = events[events.length - 1].state;
+  // HUD
+  const WIND = ["東","南","西","北"];
+  document.getElementById("round").textContent = st.round_label ?? "東1局";
+  document.getElementById("csub").textContent =
+    `${st.honba ?? 0}本場 ・ 供託 ${st.kyotaku ?? 0} ・ ドラ表示は下段`;
+  for (let s = 0; s < 4; s++) {
+    const el = document.getElementById("s" + s);
+    el.innerHTML = `<small>${WIND[s]}家${st.dealer === s ? " ・ 親" : ""}${st.turn === s ? " ・ ツモ番" : ""}</small>` +
+      `<span class="${st.turn === s ? "turn" : ""}">${Number(st.scores[s]).toLocaleString()}</span>`;
+  }
+  const scene = new Float32Array(build_scene(JSON.stringify(st)));
+
+  const canvas = document.getElementById("gpu");
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) throw new Error("no adapter");
+  const device = await adapter.requestDevice();
+  const context = canvas.getContext("webgpu");
+  const format = navigator.gpu.getPreferredCanvasFormat();
+
+  const atlasCanvas = makeAtlas();
+  const atlasTex = device.createTexture({
+    size: [atlasCanvas.width, atlasCanvas.height],
+    format: "rgba8unorm",
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+  device.queue.copyExternalImageToTexture(
+    { source: atlasCanvas }, { texture: atlasTex }, [atlasCanvas.width, atlasCanvas.height]);
+  const sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
+
+  const quad = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+  const quadBuf = device.createBuffer({ size: quad.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(quadBuf, 0, quad);
+  const idxBuf = device.createBuffer({ size: 24, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(idxBuf, 0, new Uint16Array([0, 2, 1, 1, 2, 3]));
+
+  const instBuf = device.createBuffer({ size: scene.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(instBuf, 0, scene);
+
+  const uniBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+
+  const module = device.createShaderModule({ code: WGSL });
+  const pipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module, entryPoint: "vs",
+      buffers: [
+        { arrayStride: 8, attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }] },
+        { arrayStride: 40, stepMode: "instance", attributes: [
+          { shaderLocation: 1, offset: 0, format: "float32x2" },
+          { shaderLocation: 2, offset: 8, format: "float32x2" },
+          { shaderLocation: 3, offset: 16, format: "float32" },
+          { shaderLocation: 4, offset: 20, format: "float32" },
+          { shaderLocation: 5, offset: 24, format: "float32x2" },
+          { shaderLocation: 6, offset: 32, format: "float32" },
+          { shaderLocation: 7, offset: 36, format: "float32" },
+        ]},
+      ],
+    },
+    fragment: { module, entryPoint: "fs", targets: [{ format,
+      blend: { color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" },
+               alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } } }] },
+    primitive: { topology: "triangle-list" },
+  });
+  const bind = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: uniBuf } },
+      { binding: 1, resource: atlasTex.createView() },
+      { binding: 2, resource: sampler },
+    ],
+  });
+
+  const count = scene.length / 10;
+  function frame(t) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      context.configure({ device, format, alphaMode: "opaque" });
+    }
+    const aspect = w / h;
+    const hx = aspect >= 1 ? 500 * aspect : 500;
+    const hy = aspect >= 1 ? 500 : 500 / aspect;
+    device.queue.writeBuffer(uniBuf, 0, new Float32Array([hx, hy, t / 1000, 0]));
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{ view: context.getCurrentTexture().createView(),
+        loadOp: "clear", clearValue: { r: 0.008, g: 0.05, b: 0.02, a: 1 }, storeOp: "store" }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bind);
+    pass.setVertexBuffer(0, quadBuf);
+    pass.setVertexBuffer(1, instBuf);
+    pass.setIndexBuffer(idxBuf, "uint16");
+    pass.drawIndexed(6, count);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+main().catch(e => {
+  console.error(e);
+  document.getElementById("fallback").style.display = "grid";
+});
+</script>
+</body>
+</html>
