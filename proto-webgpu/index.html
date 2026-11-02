@@ -97,7 +97,8 @@ struct VsOut {
 @vertex
 fn vs(v: VsIn) -> VsOut {
   var o: VsOut;
-  let pulse = select(1.0, 1.0 + 0.05 * sin(U.time * 3.5), v.ihot > 0.5);
+  let is_hot = (v.ihot > 0.5 && v.ihot < 1.5) || v.ihot > 2.5; // hot: 1/3 のみパルス（2 は赤ドラ）
+  let pulse = select(1.0, 1.0 + 0.05 * sin(U.time * 3.5), is_hot);
   let half_size = v.isize * 0.5 * 1.18 * pulse;
   let c = cos(v.irot); let s = sin(v.irot);
   let rot = mat2x2<f32>(c, s, -s, c);
@@ -298,6 +299,8 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
   let face_d = sd_round_box(p, vec2<f32>(0.425, 0.425), 0.065);
   if (face_d > 0.0) { return vec4<f32>(body, alpha); }
   var face = vec3<f32>(0.995, 0.99, 0.965);
+  let aka = o.hot > 1.5; // hot: 2/3 は赤ドラ（本家の観戦ページと同じく淡赤地＋赤枠）
+  if (aka) { face = vec3<f32>(0.984, 0.906, 0.894); }
   face *= 0.97 + 0.05 * (0.5 - p.y);
   let fuv = p / 0.85 + 0.5;   // フェイス座標 0..1
   let tile = i32(o.tile + 0.5);
@@ -320,7 +323,11 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
       }
     }
   }
-  if (o.hot > 0.5) {
+  if (aka) {
+    let bd = min(min(fuv.x, 1.0 - fuv.x), min(fuv.y, 1.0 - fuv.y));
+    face = mix(vec3<f32>(0.753, 0.224, 0.169), face, smoothstep(0.045, 0.075, bd));
+  }
+  if ((o.hot > 0.5 && o.hot < 1.5) || o.hot > 2.5) {
     let glow = 0.5 + 0.5 * sin(U.time * 3.5);
     face = mix(face, vec3<f32>(1.0, 0.75, 0.25), 0.18 * glow);
   }

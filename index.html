@@ -180,14 +180,20 @@
 </main>
 <script>
 "use strict";
-// 牌の数値表現（サーバーのエンジンと同じ）：0-8 萬子, 9-17 筒子, 18-26 索子, 27-33 字牌
+// 牌の数値表現（サーバーのエンジンと同じ）：0-8 萬子, 9-17 筒子, 18-26 索子, 27-33 字牌,
+// 34=赤5萬, 35=赤5筒, 36=赤5索（赤ドラ。顔は通常の5と同じで、地を赤枠＋淡赤にする＝本家の観戦ページと同じ扱い）
 const NUM = ["一","二","三","四","五","六","七","八","九"];
 const SUIT = ["萬","筒","索"];
 const HONOR = ["東","南","西","北","白","發","中"];
 const WIND = ["東","南","西","北"];
 const ROT = { bottom: "", right: " rot270", top: " rot180", left: " rot90" };
+const AKA_BASE = { 34: 4, 35: 13, 36: 22 }; // 赤ドラ → 通常牌の番号
+function isAka(t){ return t >= 34 && t <= 36; }
+function baseTile(t){ return isAka(t) ? AKA_BASE[t] : t; }
+function tileSortKey(t){ const b = baseTile(t); return b * 2 + (isAka(t) ? 1 : 0); } // 赤は通常の5の隣に並べる
 function tileLabel(t){
-  if (typeof t !== "number" || t < 0 || t > 33) return "?";
+  if (typeof t !== "number" || t < 0 || t > 36) return "?";
+  if (isAka(t)) return "赤" + NUM[4] + SUIT[Math.floor(AKA_BASE[t] / 9)];
   if (t <= 26) return NUM[t % 9] + SUIT[Math.floor(t / 9)];
   return HONOR[t - 27];
 }
@@ -215,15 +221,18 @@ const PIP_COL = { // 0=青 1=緑 2=赤
 const PCOL = ["#2456c8", "#189a46", "#d43a2f"];
 const SERIF = '"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
 function tileSVG(t){
-  const body = '<rect x="0.75" y="0.75" width="28.5" height="38.5" rx="3.5" fill="#f8f5ec" stroke="#a8a294" stroke-width="1.5"/>' +
-               '<rect x="2" y="34.5" width="26" height="3.5" rx="1.5" fill="#e3ddcb"/>';
+  const aka = isAka(t);
+  const bt = baseTile(t); // 赤ドラは通常の5の顔で描く
+  const faceBg = aka ? "#fbe9e7" : "#f8f5ec";
+  const body = `<rect x="0.75" y="0.75" width="28.5" height="38.5" rx="3.5" fill="${faceBg}" stroke="#a8a294" stroke-width="1.5"/>` +
+               `<rect x="2" y="34.5" width="26" height="3.5" rx="1.5" fill="${aka ? "#efd5d0" : "#e3ddcb"}"/>`;
   let face = "";
   const X = p => 3 + p[0] * 24, Y = p => 3 + p[1] * 34;
-  if (t >= 0 && t <= 8){ // 萬子
-    face = `<text x="15" y="16" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="12.5" fill="#22304a">${NUM[t]}</text>` +
+  if (bt >= 0 && bt <= 8){ // 萬子
+    face = `<text x="15" y="16" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="12.5" fill="#22304a">${NUM[bt]}</text>` +
            `<text x="15" y="33.5" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="13.5" fill="#b3271e">萬</text>`;
-  } else if (t >= 9 && t <= 17){ // 筒子
-    const n = t - 8;
+  } else if (bt >= 9 && bt <= 17){ // 筒子
+    const n = bt - 8;
     if (n === 1){
       face = '<circle cx="15" cy="20" r="10.5" fill="none" stroke="#189a46" stroke-width="2.6"/>' +
              '<circle cx="15" cy="20" r="7.4" fill="none" stroke="#2456c8" stroke-width="2.2"/>' +
@@ -232,11 +241,11 @@ function tileSVG(t){
       const R = n >= 6 ? 2.9 : 3.4;
       face = PIP_POS[n].map((p, i) => {
         const c = PCOL[PIP_COL[n][i]], cx = X(p), cy = Y(p);
-        return `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${c}"/><circle cx="${cx}" cy="${cy}" r="${(R*0.62).toFixed(2)}" fill="#f8f5ec"/><circle cx="${cx}" cy="${cy}" r="${(R*0.3).toFixed(2)}" fill="${c}"/>`;
+        return `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${c}"/><circle cx="${cx}" cy="${cy}" r="${(R*0.62).toFixed(2)}" fill="${faceBg}"/><circle cx="${cx}" cy="${cy}" r="${(R*0.3).toFixed(2)}" fill="${c}"/>`;
       }).join("");
     }
-  } else if (t >= 18 && t <= 26){ // 索子
-    const n = t - 17;
+  } else if (bt >= 18 && bt <= 26){ // 索子
+    const n = bt - 17;
     if (n === 1){
       face = '<circle cx="15" cy="20" r="9.5" fill="#189a46"/><circle cx="15" cy="20" r="6.2" fill="#e8a713"/><circle cx="15" cy="20" r="3.2" fill="#d43a2f"/>' +
              '<circle cx="7.5" cy="12" r="2.5" fill="#2456c8"/><circle cx="22.5" cy="12" r="2.5" fill="#2456c8"/>';
@@ -249,14 +258,15 @@ function tileSVG(t){
         return `<rect x="${(cx-1.7).toFixed(2)}" y="${(cy-4.6).toFixed(2)}" width="3.4" height="9.2" rx="1.7" fill="${c}"/><rect x="${(cx-1.7).toFixed(2)}" y="${(cy-0.45).toFixed(2)}" width="3.4" height="0.9" fill="#0b5c2c"/>`;
       }).join("");
     }
-  } else if (t >= 27){ // 字牌
-    if (t === 31){ // 白：青枠
+  } else if (bt >= 27){ // 字牌
+    if (bt === 31){ // 白：青枠
       face = '<rect x="7.5" y="10" width="15" height="20" fill="none" stroke="#2456c8" stroke-width="1.8"/>';
     } else {
-      const col = t === 32 ? "#189a46" : t === 33 ? "#d43a2f" : "#22304a";
-      face = `<text x="15" y="28" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="16" fill="${col}">${HONOR[t-27]}</text>`;
+      const col = bt === 32 ? "#189a46" : bt === 33 ? "#d43a2f" : "#22304a";
+      face = `<text x="15" y="28" text-anchor="middle" font-family='${SERIF}' font-weight="700" font-size="16" fill="${col}">${HONOR[bt-27]}</text>`;
     }
   }
+  if (aka) face += '<rect x="2.6" y="2.6" width="24.8" height="34.8" rx="2.4" fill="none" stroke="#c0392b" stroke-width="2"/>';
   return `<svg viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">${body}${face}</svg>`;
 }
 function tileEl(t, cls){
@@ -408,7 +418,7 @@ function render(){
       const handDiv = document.createElement("div"); handDiv.className = "hand";
       const visible = vp === null || vp === seat;
       if (Array.isArray(hand)){
-        const sorted = [...hand].sort((a,b) => tileVal(a) - tileVal(b));
+        const sorted = [...hand].sort((a,b) => tileSortKey(tileVal(a)) - tileSortKey(tileVal(b)));
         for (const t of sorted){
           const v = tileVal(t);
           handDiv.append(visible && v >= 0 ? tileEl(v, rot.trim()) : backEl(rot.trim()));

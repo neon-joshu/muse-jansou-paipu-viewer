@@ -2,13 +2,28 @@
 //!
 //! 1インスタンス = 10 floats:
 //! [cx, cy, w, h, rot_rad, tile_id, glyph_a, glyph_b, hot, kind]
-//!   tile_id: 0..33 = 牌フェイス, -1 = 裏面
+//!   tile_id: 0..33 = 牌フェイス, -1 = 裏面（赤ドラ 34..36 は通常の5に正規化して渡す）
 //!   glyph_a/glyph_b: 字牌・萬子用アトラス番号（-1 = なし, glyph_b=-2 = 中央に単独表示）
-//!   hot: 1.0 = 最新の捨て牌（パルス対象）
+//!   hot: 0 = 通常, 1 = 最新の捨て牌（パルス対象）, 2 = 赤ドラ, 3 = 赤ドラ かつ 最新の捨て牌
 //!   kind: 0 = 牌, 1 = 卓フェルト, 2 = 中央パネル
 use wasm_bindgen::prelude::*;
 
 const STRIDE: usize = 10;
+
+/// 赤ドラ（34=赤5萬, 35=赤5筒, 36=赤5索）かどうか
+fn is_aka(tile: i32) -> bool {
+    (34..=36).contains(&tile)
+}
+
+/// 赤ドラを通常の5に、それ以外はそのまま返す
+fn base_of(tile: i32) -> i32 {
+    match tile {
+        34 => 4,
+        35 => 13,
+        36 => 22,
+        t => t,
+    }
+}
 
 fn glyphs(tile: i32) -> (f32, f32) {
     match tile {
@@ -24,6 +39,12 @@ struct Emitter {
 
 impl Emitter {
     fn push(&mut self, cx: f32, cy: f32, w: f32, h: f32, rot: f32, tile: i32, hot: f32, kind: f32) {
+        // 赤ドラは通常の5のフェイスで描き、hot に +2 してシェーダへ伝える
+        let (tile, hot) = if kind == 0.0 && is_aka(tile) {
+            (base_of(tile), hot + 2.0)
+        } else {
+            (tile, hot)
+        };
         let (ga, gb) = if kind == 0.0 && tile >= 0 { glyphs(tile) } else { (-1.0, -1.0) };
         self.out.extend_from_slice(&[cx, cy, w, h, rot, tile as f32, ga, gb, hot, kind]);
     }
@@ -121,7 +142,8 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         let (tw, th, gap) = (46.0f32, 64.0f32, 3.0f32);
         let total = n as f32 * (tw + gap) - gap;
         if seat == 0 {
-            hand.sort_unstable();
+            // 赤ドラは通常の5の隣に並べる（DOM 版ビューアと同じキー）
+            hand.sort_unstable_by_key(|&t| base_of(t) * 2 + if is_aka(t) { 1 } else { 0 });
             for (i, t) in hand.iter().enumerate() {
                 let lx = -total / 2.0 + tw / 2.0 + i as f32 * (tw + gap);
                 let (x, y) = seat_xy(seat, lx, 446.0);
