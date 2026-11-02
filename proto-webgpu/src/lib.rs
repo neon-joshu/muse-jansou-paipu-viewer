@@ -235,6 +235,8 @@ pub fn build_scene(state_json: &str, viewpoint: i32) -> Vec<f32> {
         }
         let (tw, th, gap) = (46.0f32, 64.0f32, 3.0f32);
         let total = n as f32 * (tw + gap) - gap;
+        // 手牌も捨て牌と同じく牌の上を中央へ向ける（左右の席は 180° 返す）
+        let trot = if seat % 2 == 1 { rot + std::f32::consts::PI } else { rot };
         let face_up = viewpoint < 0 || viewpoint == seat as i32;
         if face_up {
             // 赤ドラは通常の5の隣に並べる（DOM 版ビューアと同じキー）
@@ -242,13 +244,13 @@ pub fn build_scene(state_json: &str, viewpoint: i32) -> Vec<f32> {
             for (i, t) in hand.iter().enumerate() {
                 let lx = -total / 2.0 + tw / 2.0 + i as f32 * (tw + gap);
                 let (x, y) = seat_xy(seat, lx, 446.0);
-                e.tile(x, y, tw, th, rot, *t, 0.0);
+                e.tile(x, y, tw, th, trot, *t, 0.0);
             }
         } else {
             for i in 0..n {
                 let lx = -total / 2.0 + tw / 2.0 + i as f32 * (tw + gap);
                 let (x, y) = seat_xy(seat, lx, 446.0);
-                e.tile(x, y, tw, th, rot, -1, 0.0);
+                e.tile(x, y, tw, th, trot, -1, 0.0);
             }
         }
     }
