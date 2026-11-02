@@ -5,10 +5,18 @@
 //!   tile_id: 0..33 = 牌フェイス, -1 = 裏面（赤ドラ 34..36 は通常の5に正規化して渡す）
 //!   glyph_a/glyph_b: 字牌・萬子用アトラス番号（-1 = なし, glyph_b=-2 = 中央に単独表示）
 //!   hot: 0 = 通常, 1 = 最新の捨て牌（パルス対象）, 2 = 赤ドラ, 3 = 赤ドラ かつ 最新の捨て牌
-//!   kind: 0 = 牌, 1 = 卓フェルト, 2 = 中央パネル
+//!        （kind=3 のグリフでは 0 = 通常, 1 = 金（親）, 2 = 淡黄（ツモ番））
+//!   kind: 0 = 牌, 1 = 卓フェルト, 2 = 中央パネル, 3 = グリフ（文字）, 4 = リーチ棒
 use wasm_bindgen::prelude::*;
 
 const STRIDE: usize = 10;
+
+// アトラスの追加グリフ番号（JS 側 GLYPHS と一致させること）
+const G_DIGIT0: i32 = 17; // '0'..'9' が 17..=26
+const G_MINUS: i32 = 27;
+const G_KYOKU: i32 = 28; // 局（白）
+const G_LWIND: i32 = 29; // 東南西北（白）が 29..=32
+const G_LKANJI: i32 = 33; // 一..九（白）が 33..=41
 
 /// 赤ドラ（34=赤5萬, 35=赤5筒, 36=赤5索）かどうか
 fn is_aka(tile: i32) -> bool {
@@ -50,6 +58,18 @@ impl Emitter {
     }
     fn tile(&mut self, cx: f32, cy: f32, w: f32, h: f32, rot: f32, tile: i32, hot: f32) {
         self.push(cx, cy, w, h, rot, tile, hot, 0.0);
+    }
+    /// 文字グリフのクワッド（kind=3）。glyph_b=-2 で中央単独表示の扱いにする
+    fn glyph(&mut self, cx: f32, cy: f32, size: f32, rot: f32, idx: i32, hot: f32) {
+        self.out.extend_from_slice(&[
+            cx, cy, size, size, rot, -1.0, idx as f32, -2.0, hot, 3.0,
+        ]);
+    }
+    /// リーチ棒（kind=4）
+    fn stick(&mut self, cx: f32, cy: f32, rot: f32) {
+        self.out.extend_from_slice(&[
+            cx, cy, 88.0, 10.0, rot, -1.0, -1.0, -1.0, 0.0, 4.0,
+        ]);
     }
 }
 
@@ -105,7 +125,7 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
     e.push(0.0, 0.0, 1000.0, 1000.0, 0.0, -2, 0.0, 1.0);
     e.push(0.0, 0.0, 330.0, 330.0, 0.0, -3, 0.0, 2.0);
 
-    // ドラ表示牌（中央パネル上）
+    // ドラ表示牌（雀魂準拠で卓の右上に配置）
     let dora = state
         .get("dora_indicators")
         .or_else(|| state.get("dora"))
@@ -114,12 +134,57 @@ pub fn build_scene(state_json: &str) -> Vec<f32> {
         .unwrap_or_default();
     for (i, d) in dora.iter().take(5).enumerate() {
         if let Some(t) = d.as_i64() {
-            e.tile(-60.0 + i as f32 * 30.0, 62.0, 27.0, 38.0, 0.0, t as i32, 0.0);
+            e.tile(122.0 + i as f32 * 37.0, -302.0, 34.0, 48.0, 0.0, t as i32, 0.0);
         }
     }
 
     let turn = state.get("turn").and_then(|v| v.as_i64()).unwrap_or(0) as usize;
     let last_mover = (turn + 3) % 4;
+    let dealer = state.get("dealer").and_then(|v| v.as_i64()).unwrap_or(0) as usize % 4;
+
+    // 局表示（パネル中央にグリフで描く：東／南 + 一..四 + 局）
+    let round_wind = state.get("round_wind").and_then(|v| v.as_i64()).unwrap_or(0);
+    let hand_index = state.get("hand_index").and_then(|v| v.as_i64()).unwrap_or(0);
+    e.glyph(-50.0, -18.0, 46.0, 0.0, G_LWIND + round_wind as i32, 0.0);
+    e.glyph(0.0, -18.0, 46.0, 0.0, G_LKANJI + hand_index as i32, 0.0);
+    e.glyph(50.0, -18.0, 46.0, 0.0, G_KYOKU, 0.0);
+
+    // 各家の点数ブロック（パネルの自家側の辺に、風＋点数をグリフで描く）
+    let scores: Vec<i64> = state
+        .get("scores")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().map(|n| n.as_i64().unwrap_or(0)).collect())
+        .unwrap_or_default();
+    let riichi: Vec<bool> = state
+        .get("riichi")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().map(|b| b.as_bool().unwrap_or(false)).collect())
+        .unwrap_or_default();
+    for seat in 0..4 {
+        let rot = seat_rot(seat);
+        // 風（親は金で示す）
+        let wind = (seat + 4 - dealer) % 4;
+        let (wx, wy) = seat_xy(seat, -72.0, 128.0);
+        e.glyph(wx, wy, 30.0, rot, G_LWIND + wind as i32, if seat == dealer { 1.0 } else { 0.0 });
+        // 点数（ツモ番は淡黄）
+        if let Some(score) = scores.get(seat) {
+            let hot = if seat == turn { 2.0 } else { 0.0 };
+            for (j, ch) in score.to_string().chars().enumerate() {
+                let g = match ch {
+                    '-' => G_MINUS,
+                    '0'..='9' => G_DIGIT0 + (ch as i32 - '0' as i32),
+                    _ => continue,
+                };
+                let (gx, gy) = seat_xy(seat, -38.0 + j as f32 * 24.5, 128.0);
+                e.glyph(gx, gy, 24.0, rot, g, hot);
+            }
+        }
+        // リーチ棒（パネルと河の境目）
+        if riichi.get(seat).copied().unwrap_or(false) {
+            let (sx, sy) = seat_xy(seat, 0.0, 170.5);
+            e.stick(sx, sy, rot);
+        }
+    }
 
     for seat in 0..4 {
         let rot = seat_rot(seat);

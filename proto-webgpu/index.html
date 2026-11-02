@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>牌譜プレーヤー WebGPU プロトタイプ</title>
 <style>
-  html, body { margin:0; height:100%; background:#04150b; overflow:hidden;
+  html, body { margin:0; height:100%; background:#03090c; overflow:hidden;
     font-family: system-ui, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
   #gpu { position:fixed; inset:0; width:100%; height:100%; display:block; }
   .hud { position:fixed; color:#e2e8f0; text-shadow:0 1px 3px rgba(0,0,0,.8); pointer-events:none; }
@@ -13,15 +13,8 @@
   #boardhud .hud { position:absolute; }
   #title { top:10px; left:12px; font-size:14px; font-weight:700; }
   #title small { display:block; font-weight:400; color:#94a3b8; font-size:11px; }
-  #center { left:50%; top:50%; transform:translate(-50%,-50%); text-align:center; }
-  #center .round { font-size:26px; font-weight:800; letter-spacing:.08em; }
+  #center { left:50%; top:57.5%; transform:translate(-50%,-50%); text-align:center; }
   #center .sub { font-size:12px; color:#cbd5e1; margin-top:2px; }
-  .score { font-size:15px; font-weight:700; font-variant-numeric:tabular-nums; }
-  .score small { display:block; font-size:11px; color:#fbbf24; font-weight:700; }
-  #s0 { left:50%; top:85%; transform:translateX(-50%); text-align:center; }
-  #s2 { left:50%; top:9.5%; transform:translateX(-50%); text-align:center; }
-  #s1 { right:7.5%; top:50%; transform:translateY(-50%); text-align:right; }
-  #s3 { left:7.5%; top:50%; transform:translateY(-50%); }
   #toolbar { position:fixed; left:50%; bottom:10px; transform:translateX(-50%); z-index:6;
     display:flex; align-items:center; gap:8px; max-width:94vw;
     background:rgba(15,23,42,.92); border:1px solid #334155; border-radius:10px; padding:7px 10px;
@@ -40,6 +33,11 @@
   #switchbtn:hover { border-color:#f472b6; }
   #srcnote { position:fixed; left:12px; bottom:56px; color:#94a3b8; font-size:11px;
     text-shadow:0 1px 3px rgba(0,0,0,.8); }
+  @media (max-width: 600px) {
+    #title { font-size:12px; max-width:52vw; }
+    #title small { display:none; }
+    #switchbtn { font-size:12px; padding:5px 9px; }
+  }
 </style>
 </head>
 <body>
@@ -48,9 +46,7 @@
 <div id="srcnote"></div>
 <div class="hud" id="title">牌譜プレーヤー WebGPU プロトタイプ<small>Wasm シーン構築 + WebGPU 手続き描画（牌フェイスはシェーダ生成）</small></div>
 <div id="boardhud">
-  <div class="hud" id="center"><div class="round" id="round">—</div><div class="sub" id="csub"></div></div>
-  <div class="hud score" id="s0"></div><div class="hud score" id="s1"></div>
-  <div class="hud score" id="s2"></div><div class="hud score" id="s3"></div>
+  <div class="hud" id="center"><div class="sub" id="csub"></div></div>
 </div>
 <div id="toolbar">
   <label id="filelabel">牌譜ファイルを開く<input id="file" type="file" accept=".ndjson,.json,.txt" hidden></label>
@@ -69,19 +65,28 @@
 import init, { build_scene } from "./pkg/proto_webgpu.js";
 
 const GLYPHS = ["一","二","三","四","五","六","七","八","九","萬",
-                "東","南","西","北","白","發","中"];
+                "東","南","西","北","白","發","中",
+                "0","1","2","3","4","5","6","7","8","9","-","局",
+                "東","南","西","北",
+                "一","二","三","四","五","六","七","八","九"];
 const GLYPH_COLORS = ["#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a","#22304a",
-                      "#c0272d","#22304a","#22304a","#22304a","#22304a","#2563eb","#179b4a","#c0272d"];
+                      "#c0272d","#22304a","#22304a","#22304a","#22304a","#2563eb","#179b4a","#c0272d",
+                      "#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9","#f1f5f9",
+                      "#f1f5f9","#f8fafc",
+                      "#f8fafc","#f8fafc","#f8fafc","#f8fafc",
+                      "#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc","#f8fafc"];
+const FONT_SERIF = '700 88px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
+const FONT_SANS = '700 84px system-ui,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
 
 function makeAtlas() {
-  const cell = 128, cols = 8, rows = 3;
+  const cell = 128, cols = 8, rows = 6;
   const cv = document.createElement("canvas");
   cv.width = cell * cols; cv.height = cell * rows;
   const ctx = cv.getContext("2d");
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.font = '700 88px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif';
   GLYPHS.forEach((g, i) => {
+    ctx.font = (i >= 17 && i <= 27) ? FONT_SANS : FONT_SERIF;
     ctx.fillStyle = GLYPH_COLORS[i];
     ctx.fillText(g, (i % cols) * cell + cell / 2, Math.floor(i / cols) * cell + cell / 2 + 4);
   });
@@ -332,7 +337,7 @@ fn draw_bamboo(p: vec2<f32>, n: i32, base: vec3<f32>) -> vec3<f32> {
 
 fn glyph_uv(idx: f32, uv: vec2<f32>) -> vec2<f32> {
   let col = idx % 8.0; let row = floor(idx / 8.0);
-  return vec2<f32>((col + uv.x) / 8.0, (row + uv.y) / 3.0);
+  return vec2<f32>((col + uv.x) / 8.0, (row + uv.y) / 6.0);
 }
 
 @fragment
@@ -340,28 +345,47 @@ fn fs(o: VsOut) -> @location(0) vec4<f32> {
   let p = o.local;
   // アトラス参照は uniform control flow が必要なため、条件分岐の前に一括で引く
   let fuv0 = clamp(p / 0.85 + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
-  let ga0 = clamp(o.glyph.x, 0.0, 16.0);
-  let gb0 = clamp(o.glyph.y, 0.0, 16.0);
+  let ga0 = clamp(o.glyph.x, 0.0, 41.0);
+  let gb0 = clamp(o.glyph.y, 0.0, 41.0);
+  let sG = textureSample(atlas, samp, glyph_uv(ga0, fuv0));
   let uvS = vec2<f32>(fuv0.x, fuv0.y * 0.92 + 0.04);
   let sS = textureSample(atlas, samp, glyph_uv(ga0, clamp((uvS - 0.06) / 0.88, vec2<f32>(0.0), vec2<f32>(1.0))));
   let uvT = vec2<f32>(fuv0.x, fuv0.y * 2.0);
   let sT = textureSample(atlas, samp, glyph_uv(ga0, clamp(uvT * 0.86 + 0.07, vec2<f32>(0.0), vec2<f32>(1.0))));
   let uvB = vec2<f32>(fuv0.x, fuv0.y * 2.0 - 1.0);
   let sB = textureSample(atlas, samp, glyph_uv(gb0, clamp(uvB * 0.86 + 0.07, vec2<f32>(0.0), vec2<f32>(1.0))));
-  // 卓フェルト
+  // 卓フェルト（雀魂寄りの濃い青緑）
   if (o.kind > 0.5 && o.kind < 1.5) {
     let d = length(p);
-    var col = mix(vec3<f32>(0.075, 0.36, 0.16), vec3<f32>(0.012, 0.10, 0.045), smoothstep(0.1, 0.85, d));
+    var col = mix(vec3<f32>(0.045, 0.20, 0.155), vec3<f32>(0.006, 0.045, 0.050), smoothstep(0.1, 0.85, d));
     col *= 0.97 + 0.05 * hash(floor(p * 220.0));
     return vec4<f32>(col, 1.0);
   }
   // 中央パネル
-  if (o.kind > 1.5) {
+  if (o.kind > 1.5 && o.kind < 2.5) {
     let d = sd_round_box(p, vec2<f32>(0.46, 0.46), 0.06);
     if (d > 0.0) { return vec4<f32>(0.0); }
-    var col = vec3<f32>(0.030, 0.055, 0.045);
+    var col = vec3<f32>(0.020, 0.035, 0.045);
     if (d > -0.012) { col = vec3<f32>(0.72, 0.55, 0.20); }
-    return vec4<f32>(col, 0.94);
+    return vec4<f32>(col, 0.96);
+  }
+  // 文字グリフ（点数・局表示。hot: 1=金（親）, 2=淡黄（ツモ番））
+  if (o.kind > 2.5 && o.kind < 3.5) {
+    var tint = vec3<f32>(1.0);
+    if (o.hot > 0.5 && o.hot < 1.5) { tint = vec3<f32>(1.0, 0.72, 0.25); }
+    else if (o.hot > 1.5) { tint = vec3<f32>(1.0, 0.93, 0.55); }
+    return vec4<f32>(sG.rgb * tint, sG.a);
+  }
+  // リーチ棒（白い棒＋中央の赤点）
+  if (o.kind > 3.5) {
+    let bar = sd_round_box(p, vec2<f32>(0.40, 0.37), 0.18);
+    let aa = fwidth(bar) * 1.2 + 0.002;
+    let cover = 1.0 - smoothstep(-aa, aa, bar);
+    var col = vec3<f32>(0.96, 0.97, 0.99);
+    let dd = length(vec2<f32>(p.x / 0.055, p.y / 0.48)) - 1.0;
+    let daa = fwidth(dd) * 1.2 + 0.02;
+    col = mix(col, vec3<f32>(0.85, 0.15, 0.15), 1.0 - smoothstep(-daa, daa, dd));
+    return vec4<f32>(col, cover);
   }
   // 影（牌ローカルで右下にずらした角丸）
   let shadow_d = sd_round_box(p - vec2<f32>(0.045, 0.065), vec2<f32>(0.485, 0.485), 0.09);
@@ -504,7 +528,6 @@ async function main() {
   });
 
   // ---- 局面の管理（読み込んだ牌譜のステップ表示） ----
-  const WIND = ["東","南","西","北"];
   let instBuf = null, instCount = 0, cur = states.length - 1;
   const posEl = document.getElementById("pos");
   const scrubEl = document.getElementById("scrub");
@@ -512,14 +535,8 @@ async function main() {
     if (!states.length) return;
     cur = Math.max(0, Math.min(i, states.length - 1));
     const s = states[cur];
-    document.getElementById("round").textContent = s.round_label ?? "—";
     document.getElementById("csub").textContent =
-      `${s.honba ?? 0}本場 ・ 供託 ${s.kyotaku ?? 0} ・ ドラ表示は下段`;
-    for (let k = 0; k < 4; k++) {
-      const el = document.getElementById("s" + k);
-      el.innerHTML = `<small>${WIND[k]}家${s.dealer === k ? " ・ 親" : ""}${s.turn === k ? " ・ ツモ番" : ""}</small>` +
-        `<span class="${s.turn === k ? "turn" : ""}">${Number(s.scores?.[k] ?? 0).toLocaleString()}</span>`;
-    }
+      `${s.honba ?? 0}本場 ・ 供託 ${s.kyotaku ?? 0} ・ 残り ${s.wall_count ?? "—"}`;
     let scene;
     try { scene = new Float32Array(build_scene(JSON.stringify(s))); }
     catch (e) {
@@ -589,7 +606,7 @@ async function main() {
     const enc = device.createCommandEncoder();
     const pass = enc.beginRenderPass({
       colorAttachments: [{ view: context.getCurrentTexture().createView(),
-        loadOp: "clear", clearValue: { r: 0.008, g: 0.05, b: 0.02, a: 1 }, storeOp: "store" }],
+        loadOp: "clear", clearValue: { r: 0.004, g: 0.028, b: 0.032, a: 1 }, storeOp: "store" }],
     });
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bind);
