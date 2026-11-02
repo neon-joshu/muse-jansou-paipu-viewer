@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>牌譜プレーヤー — Muse雀荘 paipu viewer</title>
+<style>
+  :root { --felt:#14532d; --felt2:#166534; --panel:#0f172a; --panel2:#1e293b; --ink:#e2e8f0; --dim:#94a3b8; --acc:#f472b6; --gold:#fbbf24; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background:#020617; color:var(--ink); }
+  header { padding:10px 14px; background:var(--panel); display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  header h1 { font-size:16px; margin:0 10px 0 0; }
+  header .meta { color:var(--dim); font-size:12px; }
+  button, select, input[type="file"] { font:inherit; }
+  button { background:var(--panel2); color:var(--ink); border:1px solid #334155; border-radius:8px; padding:6px 10px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.primary { background:#7c2d12; border-color:var(--gold); }
+  textarea { width:100%; min-height:70px; background:#0b1220; color:var(--ink); border:1px solid #334155; border-radius:8px; padding:8px; }
+  .loader { padding:10px 14px; background:#0b1220; display:none; }
+  .loader.open { display:block; }
+  main { padding:12px; max-width:1100px; margin:0 auto; }
+  .board { background:radial-gradient(circle at 50% 45%, var(--felt2), var(--felt)); border-radius:16px; padding:12px; display:grid; grid-template-columns: 1fr 240px 1fr; grid-template-rows: auto auto auto; gap:10px; }
+  .seat { background:rgba(2,6,23,.55); border:1px solid rgba(148,163,184,.35); border-radius:12px; padding:8px; min-height:118px; }
+  .seat.turn { border-color:var(--gold); box-shadow:0 0 0 2px rgba(251,191,36,.35); }
+  .seat.top { grid-column:2; grid-row:1; }
+  .seat.right { grid-column:3; grid-row:2; }
+  .seat.bottom { grid-column:2; grid-row:3; }
+  .seat.left { grid-column:1; grid-row:2; }
+  .center { grid-column:2; grid-row:2; background:rgba(2,6,23,.7); border-radius:12px; padding:10px; text-align:center; }
+  .center .round { font-size:22px; font-weight:700; }
+  .center .sub { color:var(--dim); font-size:12px; margin-top:2px; }
+  .shead { display:flex; justify-content:space-between; align-items:baseline; gap:6px; }
+  .sname { font-weight:700; }
+  .sname .wind { color:var(--gold); margin-right:4px; }
+  .sscore { font-variant-numeric:tabular-nums; color:#fde68a; }
+  .tags { font-size:11px; color:var(--acc); min-height:14px; }
+  .hand { margin-top:4px; display:flex; flex-wrap:wrap; gap:2px; }
+  .river { margin-top:6px; display:flex; flex-wrap:wrap; gap:2px; max-width:300px; }
+  .melds { margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; }
+  .meld { display:flex; gap:1px; background:rgba(148,163,184,.12); padding:2px; border-radius:4px; }
+  .tile { display:inline-flex; align-items:center; justify-content:center; width:24px; height:32px; background:#f8fafc; color:#0f172a; border-radius:4px; border:1px solid #cbd5e1; font-size:13px; font-weight:700; line-height:1; }
+  .tile small { font-size:9px; font-weight:600; }
+  .tile.honor { color:#7c2d12; }
+  .tile.back { background:#7f1d1d; border-color:#991b1b; color:#fecaca; font-size:10px; }
+  .tile.river { width:20px; height:27px; font-size:11px; opacity:.92; }
+  .tile.dora { outline:2px solid var(--gold); }
+  .controls { margin-top:12px; background:var(--panel); border-radius:12px; padding:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .controls input[type="range"] { flex:1; min-width:160px; }
+  .evinfo { font-variant-numeric:tabular-nums; color:var(--dim); font-size:13px; }
+  .jumps { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+  .jumps button { font-size:12px; padding:4px 8px; }
+  .results { margin-top:12px; background:var(--panel); border-radius:12px; padding:10px; display:none; }
+  .results.open { display:block; }
+  .results table { border-collapse:collapse; }
+  .results td, .results th { padding:3px 10px 3px 0; text-align:left; }
+  .drop { border:2px dashed #334155; border-radius:12px; padding:16px; text-align:center; color:var(--dim); margin-bottom:12px; }
+  .drop.over { border-color:var(--acc); color:var(--ink); }
+  .err { color:#fca5a5; white-space:pre-wrap; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🀄 牌譜プレーヤー</h1>
+  <button id="btn-file">ファイルを開く</button>
+  <input type="file" id="file" accept=".ndjson,.json,.txt" hidden>
+  <button id="btn-paste">貼り付け</button>
+  <button id="btn-sample">サンプル</button>
+  <span class="meta" id="filemeta">Muse雀荘の牌譜（NDJSON, schema v1）を再生します</span>
+</header>
+<div class="loader" id="loader">
+  <textarea id="paste" placeholder="NDJSON牌譜をここに貼り付け"></textarea>
+  <div style="margin-top:6px"><button id="btn-load-paste" class="primary">読み込む</button></div>
+  <div class="err" id="err"></div>
+</div>
+<main>
+  <div class="drop" id="drop">牌譜ファイル（.ndjson）をドロップしても読み込めます</div>
+  <section class="board" id="board">
+    <div class="seat top" data-pos="top"></div>
+    <div class="seat left" data-pos="left"></div>
+    <div class="center">
+      <div class="round" id="c-round">—</div>
+      <div class="sub" id="c-sub">牌譜を読み込んでください</div>
+      <div class="sub" id="c-dora"></div>
+      <div class="sub" id="c-wall"></div>
+    </div>
+    <div class="seat right" data-pos="right"></div>
+    <div class="seat bottom" data-pos="bottom"></div>
+  </section>
+  <section class="controls">
+    <button id="btn-first">⏮</button>
+    <button id="btn-prev">◀</button>
+    <button id="btn-play" class="primary">▶ 再生</button>
+    <button id="btn-next">▶|</button>
+    <button id="btn-last">⏭</button>
+    <input type="range" id="scrub" min="0" max="0" value="0">
+    <select id="speed">
+      <option value="1600">0.5x</option>
+      <option value="900" selected>1x</option>
+      <option value="450">2x</option>
+      <option value="200">4x</option>
+    </select>
+    <select id="viewpoint">
+      <option value="master">視点：全席オープン</option>
+      <option value="0">視点：東家</option>
+      <option value="1">視点：南家</option>
+      <option value="2">視点：西家</option>
+      <option value="3">視点：北家</option>
+    </select>
+    <span class="evinfo" id="evinfo"></span>
+  </section>
+  <div class="jumps" id="jumps"></div>
+  <section class="results" id="results"></section>
+</main>
+<script>
+"use strict";
+// 牌の数値表現（サーバーのエンジンと同じ）：0-8 萬子, 9-17 筒子, 18-26 索子, 27-33 字牌
+const NUM = ["一","二","三","四","五","六","七","八","九"];
+const SUIT = ["萬","筒","索"];
+const HONOR = ["東","南","西","北","白","發","中"];
+const WIND = ["東","南","西","北"];
+function tileLabel(t){
+  if (typeof t !== "number" || t < 0 || t > 33) return "?";
+  if (t <= 26) return NUM[t % 9] + SUIT[Math.floor(t / 9)];
+  return HONOR[t - 27];
+}
+function tileVal(x){ // 捨て牌などは数値か {tile:n} のどちらか
+  if (typeof x === "number") return x;
+  if (x && typeof x === "object" && typeof x.tile === "number") return x.tile;
+  return -1;
+}
+function tileEl(t, cls){
+  const s = document.createElement("span");
+  s.className = "tile" + (cls ? " " + cls : "") + (t >= 27 ? " honor" : "");
+  s.textContent = tileLabel(t);
+  return s;
+}
+function backEl(){ const s = document.createElement("span"); s.className = "tile back"; s.textContent = "🀄"; return s; }
+
+let paipu = null;   // {header, events:[{seq,revision,kind,state}], footer}
+let idx = 0;
+let timer = null;
+
+function roundLabel(st){
+  if (!st) return "—";
+  if (typeof st.round_label === "string" && st.round_label) return st.round_label;
+  if (typeof st.round === "string") return st.round;
+  if (st.round && typeof st.round === "object"){
+    if (typeof st.round.label === "string") return st.round.label;
+    return (st.round.wind ?? "?") + (st.round.number ?? "?") + "局";
+  }
+  if (st.round_wind !== undefined && st.hand_index !== undefined)
+    return st.round_wind + (Number(st.hand_index) + 1) + "局";
+  return "—";
+}
+function riichiSeats(st){
+  const r = st.riichi;
+  if (Array.isArray(r)){
+    if (r.every(v => typeof v === "boolean")) return r.map((v,i)=>v?i:-1).filter(i=>i>=0);
+    return r.filter(v => typeof v === "number");
+  }
+  if (typeof r === "number") return [r];
+  return [];
+}
+function seatName(seat, st){
+  const occ = st && st.occupancy;
+  if (Array.isArray(occ) && occ[seat]){
+    const o = occ[seat];
+    if (typeof o === "object" && o.display_name) return String(o.display_name);
+  }
+  if (paipu && paipu.footer && Array.isArray(paipu.footer.results)){
+    const r = paipu.footer.results.find(x => x.seat === seat);
+    if (r && r.display_name && r.display_name !== "sample") return String(r.display_name);
+  }
+  return WIND[seat] + "家";
+}
+
+function render(){
+  const ev = paipu ? paipu.events[idx] : null;
+  const st = ev ? ev.state : null;
+  document.getElementById("c-round").textContent = st ? roundLabel(st) : "—";
+  document.getElementById("c-sub").textContent = st
+    ? (st.phase ?? "") + " / " + (ev.kind ?? "") : "牌譜を読み込んでください";
+  const dora = st ? (st.dora ?? st.dora_indicators ?? []) : [];
+  const cd = document.getElementById("c-dora");
+  cd.textContent = "";
+  if (st && dora.length){
+    cd.append("ドラ表示: ");
+    dora.map(tileVal).forEach(t => { if (t >= 0) cd.appendChild(tileEl(t)); });
+  }
+  document.getElementById("c-wall").textContent = st
+    ? `本場 ${st.honba ?? 0} ・ 供託 ${st.kyotaku ?? 0} ・ 残り ${st.wall_count ?? "?"}`
+    : "";
+  document.getElementById("evinfo").textContent = ev
+    ? `#${idx + 1}/${paipu.events.length} seq=${ev.seq} rev=${ev.revision}` : "";
+  document.getElementById("scrub").max = paipu ? String(paipu.events.length - 1) : "0";
+  document.getElementById("scrub").value = String(idx);
+
+  const vpSel = document.getElementById("viewpoint").value;
+  const vp = vpSel === "master" ? null : Number(vpSel);
+  const base = vp ?? 0;
+  const posSeat = { bottom: base, right: (base + 1) % 4, top: (base + 2) % 4, left: (base + 3) % 4 };
+  const riichi = st ? riichiSeats(st) : [];
+  for (const [pos, seat] of Object.entries(posSeat)){
+    const box = document.querySelector(`.seat[data-pos="${pos}"]`);
+    box.innerHTML = "";
+    box.classList.toggle("turn", !!st && st.turn === seat);
+    const head = document.createElement("div"); head.className = "shead";
+    const nm = document.createElement("span"); nm.className = "sname";
+    nm.innerHTML = "";
+    const w = document.createElement("span"); w.className = "wind"; w.textContent = WIND[seat];
+    nm.append(w, document.createTextNode(seatName(seat, st)));
+    if (st && st.dealer === seat){ const d = document.createElement("span"); d.textContent = " 親"; d.style.color = "var(--gold)"; nm.append(d); }
+    const sc = document.createElement("span"); sc.className = "sscore";
+    sc.textContent = st && Array.isArray(st.scores) ? Number(st.scores[seat]).toLocaleString() : "";
+    head.append(nm, sc); box.append(head);
+    const tags = document.createElement("div"); tags.className = "tags";
+    if (riichi.includes(seat)) tags.textContent = "リーチ";
+    box.append(tags);
+    if (st){
+      // 手牌
+      const hand = Array.isArray(st.hands) ? st.hands[seat] : null;
+      const handDiv = document.createElement("div"); handDiv.className = "hand";
+      const visible = vp === null || vp === seat;
+      if (Array.isArray(hand)){
+        const sorted = [...hand].sort((a,b) => tileVal(a) - tileVal(b));
+        for (const t of sorted){
+          const v = tileVal(t);
+          handDiv.append(visible && v >= 0 ? tileEl(v) : backEl());
+        }
+      }
+      box.append(handDiv);
+      // 鳴き
+      const melds = Array.isArray(st.melds) ? st.melds[seat] : null;
+      if (Array.isArray(melds) && melds.length){
+        const md = document.createElement("div"); md.className = "melds";
+        for (const m of melds){
+          const g = document.createElement("span"); g.className = "meld";
+          const tiles = Array.isArray(m) ? m : (m && Array.isArray(m.tiles) ? m.tiles : []);
+          for (const t of tiles){ const v = tileVal(t); if (v >= 0) g.appendChild(tileEl(v)); }
+          if (g.childNodes.length) md.append(g);
+        }
+        box.append(md);
+      }
+      // 河
+      const river = Array.isArray(st.discards) ? st.discards[seat] : null;
+      if (Array.isArray(river)){
+        const rv = document.createElement("div"); rv.className = "river";
+        for (const t of river){ const v = tileVal(t); if (v >= 0) rv.appendChild(tileEl(v, "river")); }
+        box.append(rv);
+      }
+    }
+  }
+  // 結果
+  const res = document.getElementById("results");
+  if (paipu && paipu.footer && Array.isArray(paipu.footer.results) && paipu.footer.results.length){
+    res.classList.add("open");
+    const rows = [...paipu.footer.results].sort((a,b) => (a.rank||9) - (b.rank||9))
+      .map(r => `<tr><td>${r.rank ? r.rank + "位" : ""}</td><td>${escapeHtml(String(r.display_name ?? ""))}</td><td>${WIND[r.seat] ?? ""}席</td><td>${Number(r.score).toLocaleString()}点</td></tr>`).join("");
+    res.innerHTML = `<strong>最終結果</strong><table>${rows}</table>`;
+  } else { res.classList.remove("open"); res.innerHTML = ""; }
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function buildJumps(){
+  const j = document.getElementById("jumps"); j.innerHTML = "";
+  if (!paipu) return;
+  let last = null;
+  paipu.events.forEach((ev, i) => {
+    const label = roundLabel(ev.state);
+    if (label !== last){
+      last = label;
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.onclick = () => { stop(); idx = i; render(); };
+      j.append(b);
+    }
+  });
+}
+
+function loadText(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) throw new Error("行が足りません（ヘッダー＋イベント列が必要です）");
+  const parsed = lines.map((l, i) => { try { return JSON.parse(l); } catch(e){ throw new Error(`${i + 1}行目がJSONではありません`); } });
+  const header = parsed[0];
+  if (header.type !== "paipu_header") throw new Error("1行目が paipu_header ではありません");
+  if (header.schema_version !== 1) throw new Error("未対応の schema_version: " + header.schema_version);
+  let footer = null;
+  if (parsed[parsed.length - 1].type === "paipu_footer"){ footer = parsed.pop(); }
+  const events = parsed.slice(1);
+  for (const e of events) if (e.type !== "event" || !e.state) throw new Error("イベント行の形式が不正です");
+  paipu = { header, events, footer };
+  idx = 0; stop();
+  document.getElementById("filemeta").textContent =
+    `match_key=${header.match_key} / ${events.length}イベント / 完全=${header.complete ? "はい" : "いいえ"}`;
+  buildJumps(); render();
+}
+
+function stop(){ if (timer){ clearInterval(timer); timer = null; document.getElementById("btn-play").textContent = "▶ 再生"; } }
+function play(){
+  if (!paipu) return;
+  if (timer){ stop(); return; }
+  document.getElementById("btn-play").textContent = "⏸ 停止";
+  timer = setInterval(() => {
+    if (idx >= paipu.events.length - 1){ stop(); return; }
+    idx++; render();
+  }, Number(document.getElementById("speed").value));
+}
+document.getElementById("speed").onchange = () => { if (timer){ stop(); play(); } };
+document.getElementById("viewpoint").onchange = render;
+document.getElementById("scrub").oninput = e => { idx = Number(e.target.value); render(); };
+document.getElementById("btn-first").onclick = () => { stop(); idx = 0; render(); };
+document.getElementById("btn-last").onclick = () => { stop(); idx = paipu ? paipu.events.length - 1 : 0; render(); };
+document.getElementById("btn-prev").onclick = () => { stop(); idx = Math.max(0, idx - 1); render(); };
+document.getElementById("btn-next").onclick = () => { stop(); idx = paipu ? Math.min(paipu.events.length - 1, idx + 1) : 0; render(); };
+document.getElementById("btn-play").onclick = play;
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowLeft") document.getElementById("btn-prev").click();
+  if (e.key === "ArrowRight") document.getElementById("btn-next").click();
+  if (e.key === " "){ e.preventDefault(); play(); }
+});
+const fileInput = document.getElementById("file");
+document.getElementById("btn-file").onclick = () => fileInput.click();
+fileInput.onchange = () => { if (fileInput.files[0]) readFile(fileInput.files[0]); };
+function readFile(f){
+  const r = new FileReader();
+  r.onload = () => { try { loadText(String(r.result)); } catch(e){ showErr(e); } };
+  r.readAsText(f);
+}
+function showErr(e){ const el = document.getElementById("err"); document.getElementById("loader").classList.add("open"); el.textContent = "読み込みエラー: " + e.message; }
+document.getElementById("btn-paste").onclick = () => document.getElementById("loader").classList.toggle("open");
+document.getElementById("btn-load-paste").onclick = () => {
+  try { document.getElementById("err").textContent = ""; loadText(document.getElementById("paste").value); }
+  catch(e){ showErr(e); }
+};
+const drop = document.getElementById("drop");
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); };
+document.getElementById("btn-sample").onclick = async () => {
+  try { const res = await fetch("sample/sample-paipu.ndjson"); if (!res.ok) throw new Error("サンプルが見つかりません"); loadText(await res.text()); }
+  catch(e){ showErr(e); }
+};
+render();
+</script>
+</body>
+</html>
